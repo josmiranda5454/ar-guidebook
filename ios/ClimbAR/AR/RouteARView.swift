@@ -13,6 +13,7 @@ struct RouteARView: View {
     @State private var isUploading = false
     @State private var latestCapture: RouteCalibrationCapture?
     @State private var latestCaptureJSON: String?
+    @State private var isControlPanelExpanded = false
 
     init(route: Route, overlay: RouteAROverlay) {
         self.route = route
@@ -38,65 +39,26 @@ struct RouteARView: View {
             RouteARSceneView(overlay: overlay, alignment: alignment)
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(route.name)
-                    .font(.headline)
-
-                Text("Overlay v\(overlay.version) • \(overlay.confidence.rawValue)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Text(alignmentHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                RouteAlignmentControls(alignment: $alignment)
-
-                Button {
-                    saveCalibrationCapture()
-                } label: {
-                    Label("Save Calibration Snapshot", systemImage: "square.and.arrow.down")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Text(captureStatus)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                if let latestCaptureJSON {
-                    ShareLink(item: latestCaptureJSON) {
-                        Label("Share Latest Snapshot JSON", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                if latestCapture != nil {
-                    Button {
-                        Task {
-                            await uploadLatestCapture()
-                        }
-                    } label: {
-                        Label("Upload Latest Snapshot", systemImage: "icloud.and.arrow.up")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isUploading)
-                }
-
-                if let uploadMessage {
-                    Text(uploadMessage)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(.regularMaterial)
+            RouteARControlPanel(
+                routeName: route.name,
+                overlay: overlay,
+                alignmentHint: alignmentHint,
+                alignment: $alignment,
+                isExpanded: $isControlPanelExpanded,
+                captureStatus: captureStatus,
+                uploadMessage: uploadMessage,
+                latestCaptureJSON: latestCaptureJSON,
+                hasLatestCapture: latestCapture != nil,
+                isUploading: isUploading,
+                saveCalibrationCapture: saveCalibrationCapture,
+                uploadLatestCapture: uploadLatestCapture
+            )
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
         }
         .navigationTitle("Find It Outside")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .onChange(of: alignment) { _, newValue in
             RouteARAlignmentStore.save(newValue, routeId: route.id, overlayId: overlay.id)
         }
@@ -161,15 +123,144 @@ struct RouteARView: View {
     }
 }
 
+private struct RouteARControlPanel: View {
+    let routeName: String
+    let overlay: RouteAROverlay
+    let alignmentHint: String
+    @Binding var alignment: RouteARAlignment
+    @Binding var isExpanded: Bool
+    let captureStatus: String
+    let uploadMessage: String?
+    let latestCaptureJSON: String?
+    let hasLatestCapture: Bool
+    let isUploading: Bool
+    let saveCalibrationCapture: () -> Void
+    let uploadLatestCapture: () async -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(routeName)
+                        .font(.headline)
+                        .lineLimit(1)
+
+                    Text("Overlay v\(overlay.version) • \(overlay.confidence.rawValue)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button(isExpanded ? "Hide" : "Tune") {
+                    withAnimation(.snappy) {
+                        isExpanded.toggle()
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            if isExpanded {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(alignmentHint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+
+                        RouteAlignmentControls(alignment: $alignment)
+
+                        calibrationActions
+
+                        statusText
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .frame(maxHeight: 280)
+            } else {
+                HStack(spacing: 10) {
+                    Text(alignment.summary)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    Button {
+                        saveCalibrationCapture()
+                    } label: {
+                        Label("Save", systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+    }
+
+    private var calibrationActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                saveCalibrationCapture()
+            } label: {
+                Label("Save", systemImage: "square.and.arrow.down")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+
+            if let latestCaptureJSON {
+                ShareLink(item: latestCaptureJSON) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if hasLatestCapture {
+                Button {
+                    Task {
+                        await uploadLatestCapture()
+                    }
+                } label: {
+                    Label("Upload", systemImage: "icloud.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isUploading)
+            }
+        }
+        .font(.caption.weight(.semibold))
+        .controlSize(.small)
+        .lineLimit(1)
+    }
+
+    private var statusText: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(captureStatus)
+            if let uploadMessage {
+                Text(uploadMessage)
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
+}
+
 private struct RouteAlignmentControls: View {
     @Binding var alignment: RouteARAlignment
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             HStack {
                 Text(alignment.summary)
-                    .font(.caption2)
+                    .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
 
                 Spacer()
 
@@ -179,73 +270,76 @@ private struct RouteAlignmentControls: View {
                 .font(.caption)
             }
 
-            HStack(spacing: 12) {
-                Spacer()
+            HStack(alignment: .center, spacing: 14) {
+                nudgePad
 
-                Button {
-                    alignment.verticalOffsetMeters += 0.1
-                } label: {
-                    Image(systemName: "arrow.up")
+                VStack(alignment: .leading, spacing: 8) {
+                    sliderRow(
+                        title: "Depth",
+                        value: $alignment.depthOffsetMeters,
+                        range: -3...3,
+                        step: 0.1
+                    )
+
+                    sliderRow(
+                        title: "Scale",
+                        value: $alignment.scale,
+                        range: 0.5...1.75,
+                        step: 0.05
+                    )
                 }
-                .buttonStyle(.bordered)
-
-                Spacer()
-            }
-
-            HStack(spacing: 12) {
-                Button {
-                    alignment.horizontalOffsetMeters -= 0.1
-                } label: {
-                    Image(systemName: "arrow.left")
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-
-                Button {
-                    alignment.horizontalOffsetMeters += 0.1
-                } label: {
-                    Image(systemName: "arrow.right")
-                }
-                .buttonStyle(.bordered)
-            }
-
-            HStack(spacing: 12) {
-                Spacer()
-
-                Button {
-                    alignment.verticalOffsetMeters -= 0.1
-                } label: {
-                    Image(systemName: "arrow.down")
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-            }
-
-            VStack(alignment: .leading) {
-                Text("Depth")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Slider(
-                    value: $alignment.depthOffsetMeters,
-                    in: -3...3,
-                    step: 0.1
-                )
-            }
-
-            VStack(alignment: .leading) {
-                Text("Scale")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Slider(
-                    value: $alignment.scale,
-                    in: 0.5...1.75,
-                    step: 0.05
-                )
             }
         }
         .padding(.top, 4)
+    }
+
+    private var nudgePad: some View {
+        VStack(spacing: 6) {
+            nudgeButton(systemName: "arrow.up") {
+                alignment.verticalOffsetMeters += 0.1
+            }
+
+            HStack(spacing: 6) {
+                nudgeButton(systemName: "arrow.left") {
+                    alignment.horizontalOffsetMeters -= 0.1
+                }
+
+                nudgeButton(systemName: "arrow.right") {
+                    alignment.horizontalOffsetMeters += 0.1
+                }
+            }
+
+            nudgeButton(systemName: "arrow.down") {
+                alignment.verticalOffsetMeters -= 0.1
+            }
+        }
+    }
+
+    private func nudgeButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .frame(width: 30, height: 26)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
+    private func sliderRow(
+        title: String,
+        value: Binding<Float>,
+        range: ClosedRange<Float>,
+        step: Float
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Slider(
+                value: value,
+                in: range,
+                step: step
+            )
+        }
     }
 }
 
