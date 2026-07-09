@@ -58,11 +58,10 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    let port = std::env::var("CLIMBAR_PORT")
-        .ok()
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(8080);
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let addr = server_addr(
+        std::env::var("CLIMBAR_HOST").ok(),
+        std::env::var("CLIMBAR_PORT").ok(),
+    );
     tracing::info!("listening on http://{addr}");
 
     let listener = tokio::net::TcpListener::bind(addr)
@@ -191,4 +190,33 @@ async fn get_area_pack(
 fn status_from_repository_error(error: RepositoryError) -> StatusCode {
     tracing::error!(?error, "repository error");
     StatusCode::INTERNAL_SERVER_ERROR
+}
+
+fn server_addr(host: Option<String>, port: Option<String>) -> SocketAddr {
+    let host = host.unwrap_or_else(|| "127.0.0.1".to_string());
+    let port = port
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(8080);
+
+    format!("{host}:{port}")
+        .parse()
+        .expect("CLIMBAR_HOST and CLIMBAR_PORT must form a valid socket address")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::server_addr;
+
+    #[test]
+    fn server_addr_defaults_to_localhost() {
+        assert_eq!(server_addr(None, None).to_string(), "127.0.0.1:8080");
+    }
+
+    #[test]
+    fn server_addr_supports_network_binding() {
+        assert_eq!(
+            server_addr(Some("0.0.0.0".to_string()), Some("8081".to_string())).to_string(),
+            "0.0.0.0:8081"
+        );
+    }
 }

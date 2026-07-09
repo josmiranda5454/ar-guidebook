@@ -22,6 +22,15 @@ Run the API with Postgres:
 CLIMBAR_DATABASE_URL=postgres://climbar:climbar@127.0.0.1:5432/climbar cargo run
 ```
 
+Run the API so a physical iPhone on the same network can reach it:
+
+```sh
+CLIMBAR_DATABASE_URL=postgres://climbar:climbar@127.0.0.1:5432/climbar CLIMBAR_HOST=0.0.0.0 cargo run
+```
+
+Use your Mac's LAN address in the iOS `CLIMBAR_API_BASE_URL` build setting,
+for example `http://192.168.1.42:8080/api/v1`.
+
 Run the API with in-memory seed data:
 
 ```sh

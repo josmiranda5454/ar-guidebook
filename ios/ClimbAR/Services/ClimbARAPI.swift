@@ -1,7 +1,7 @@
 import Foundation
 
 struct ClimbARAPI {
-    var baseURL = URL(string: "http://127.0.0.1:8080/api/v1")!
+    var baseURL = AppConfiguration.apiBaseURL
 
     func areas() async throws -> [Area] {
         try await get(path: "areas")
@@ -57,4 +57,16 @@ struct ClimbARAPI {
 enum APIError: Error {
     case invalidURL
     case requestFailed
+}
+
+enum AppConfiguration {
+    static var apiBaseURL: URL {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "CLIMBAR_API_BASE_URL") as? String,
+              !value.isEmpty,
+              let url = URL(string: value) else {
+            return URL(string: "http://127.0.0.1:8080/api/v1")!
+        }
+
+        return url
+    }
 }
