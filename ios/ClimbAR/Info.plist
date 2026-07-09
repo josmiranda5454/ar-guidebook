@@ -26,6 +26,13 @@
 	<string>ClimbAR uses the camera to align AR route overlays with the rock face.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>ClimbAR uses your location to find nearby climbing routes and enable outdoor AR guidance.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>ClimbAR connects to the local development backend while testing on a physical device.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
