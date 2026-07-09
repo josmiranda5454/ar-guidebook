@@ -185,6 +185,7 @@ pub struct RouteArOverlay {
     pub compass_bearing_degrees: Option<f32>,
     pub wall_plane: Option<WallPlaneEstimate>,
     pub route_trace: RouteTrace,
+    pub default_alignment: Option<RouteArAlignment>,
     pub confidence: OverlayConfidence,
     pub reviewed_at: Option<DateTime<Utc>>,
 }
@@ -207,6 +208,45 @@ pub struct RouteCalibrationCapture {
     pub anchor_strategy: ArAnchorStrategy,
     pub alignment: RouteArAlignment,
     pub captured_at: DateTime<Utc>,
+    #[serde(default)]
+    pub review_status: CalibrationReviewStatus,
+    pub reviewer_notes: Option<String>,
+    pub reviewed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CalibrationReviewStatus {
+    #[default]
+    Pending,
+    GoodCandidate,
+    Rejected,
+    Applied,
+}
+
+impl fmt::Display for CalibrationReviewStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Pending => "pending",
+            Self::GoodCandidate => "good_candidate",
+            Self::Rejected => "rejected",
+            Self::Applied => "applied",
+        })
+    }
+}
+
+impl FromStr for CalibrationReviewStatus {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "good_candidate" => Ok(Self::GoodCandidate),
+            "rejected" => Ok(Self::Rejected),
+            "applied" => Ok(Self::Applied),
+            _ => Err(format!("unknown calibration review status: {value}")),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

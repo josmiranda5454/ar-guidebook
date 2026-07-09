@@ -1,8 +1,8 @@
 use crate::{
     models::{
-        ArAnchorStrategy, Area, GeoPoint, GradeSystem, MediaAsset, MediaKind, OfflinePack,
-        OverlayConfidence, Route, RouteArAlignment, RouteArOverlay, RouteCalibrationCapture,
-        RouteTrace, RouteType, Wall, WallPlaneEstimate,
+        ArAnchorStrategy, Area, CalibrationReviewStatus, GeoPoint, GradeSystem, MediaAsset,
+        MediaKind, OfflinePack, OverlayConfidence, Route, RouteArAlignment, RouteArOverlay,
+        RouteCalibrationCapture, RouteTrace, RouteType, Wall, WallPlaneEstimate,
     },
     repository::{GuideRepository, RepositoryError, RepositoryResult},
 };
@@ -223,17 +223,20 @@ impl PgGuideRepository {
             .map_err(|error| RepositoryError::Decode(error.to_string()))?;
         let route_trace = serde_json::to_value(&overlay.route_trace)
             .map_err(|error| RepositoryError::Decode(error.to_string()))?;
+        let default_alignment = serde_json::to_value(&overlay.default_alignment)
+            .map_err(|error| RepositoryError::Decode(error.to_string()))?;
 
         sqlx::query(
             r#"
             INSERT INTO route_ar_overlays (
                 id, route_id, version, anchor_strategy, gps_hint, gps_hint_elevation_meters,
-                compass_bearing_degrees, wall_plane, route_trace, confidence, reviewed_at
+                compass_bearing_degrees, wall_plane, route_trace, default_alignment, confidence,
+                reviewed_at
             )
             VALUES (
                 $1, $2, $3, $4,
                 ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography,
-                $7, $8, $9, $10, $11, $12
+                $7, $8, $9, $10, $11, $12, $13
             )
             ON CONFLICT (id) DO UPDATE SET
                 route_id = EXCLUDED.route_id,
@@ -244,6 +247,7 @@ impl PgGuideRepository {
                 compass_bearing_degrees = EXCLUDED.compass_bearing_degrees,
                 wall_plane = EXCLUDED.wall_plane,
                 route_trace = EXCLUDED.route_trace,
+                default_alignment = EXCLUDED.default_alignment,
                 confidence = EXCLUDED.confidence,
                 reviewed_at = EXCLUDED.reviewed_at
             "#,
@@ -258,6 +262,7 @@ impl PgGuideRepository {
         .bind(overlay.compass_bearing_degrees)
         .bind(wall_plane)
         .bind(route_trace)
+        .bind(default_alignment)
         .bind(overlay.confidence.to_string())
         .bind(overlay.reviewed_at)
         .execute(&self.pool)
@@ -560,7 +565,8 @@ impl PgGuideRepository {
                    ST_Y(gps_hint::geometry) AS latitude,
                    ST_X(gps_hint::geometry) AS longitude,
                    gps_hint_elevation_meters AS elevation_meters,
-                   compass_bearing_degrees, wall_plane, route_trace, confidence, reviewed_at
+                   compass_bearing_degrees, wall_plane, route_trace, default_alignment,
+                   confidence, reviewed_at
             FROM route_ar_overlays
             WHERE route_id = $1
             ORDER BY version DESC
@@ -576,6 +582,8 @@ impl PgGuideRepository {
                 let confidence: String = row.try_get("confidence")?;
                 let wall_plane_json: Option<serde_json::Value> = row.try_get("wall_plane")?;
                 let route_trace_json: serde_json::Value = row.try_get("route_trace")?;
+                let default_alignment_json: Option<serde_json::Value> =
+                    row.try_get("default_alignment")?;
 
                 Ok(RouteArOverlay {
                     id: row.try_get("id")?,
@@ -594,6 +602,11 @@ impl PgGuideRepository {
                     },
                     route_trace: serde_json::from_value::<RouteTrace>(route_trace_json)
                         .map_err(|error| RepositoryError::Decode(error.to_string()))?,
+                    default_alignment: match default_alignment_json {
+                        Some(value) => serde_json::from_value::<Option<RouteArAlignment>>(value)
+                            .map_err(|error| RepositoryError::Decode(error.to_string()))?,
+                        None => None,
+                    },
                     confidence: OverlayConfidence::from_str(&confidence)
                         .map_err(RepositoryError::Decode)?,
                     reviewed_at: row.try_get::<Option<DateTime<Utc>>, _>("reviewed_at")?,
@@ -613,9 +626,9 @@ impl PgGuideRepository {
             r#"
             INSERT INTO route_calibration_captures (
                 id, route_id, route_name, overlay_id, overlay_version, anchor_strategy,
-                alignment, captured_at
+                alignment, captured_at, review_status, reviewer_notes, reviewed_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT (id) DO UPDATE SET
                 route_id = EXCLUDED.route_id,
                 route_name = EXCLUDED.route_name,
@@ -623,7 +636,10 @@ impl PgGuideRepository {
                 overlay_version = EXCLUDED.overlay_version,
                 anchor_strategy = EXCLUDED.anchor_strategy,
                 alignment = EXCLUDED.alignment,
-                captured_at = EXCLUDED.captured_at
+                captured_at = EXCLUDED.captured_at,
+                review_status = EXCLUDED.review_status,
+                reviewer_notes = EXCLUDED.reviewer_notes,
+                reviewed_at = EXCLUDED.reviewed_at
             "#,
         )
         .bind(capture.id)
@@ -634,6 +650,9 @@ impl PgGuideRepository {
         .bind(capture.anchor_strategy.to_string())
         .bind(alignment)
         .bind(capture.captured_at)
+        .bind(capture.review_status.to_string())
+        .bind(&capture.reviewer_notes)
+        .bind(capture.reviewed_at)
         .execute(&self.pool)
         .await?;
 
@@ -648,7 +667,7 @@ impl PgGuideRepository {
         let rows = sqlx::query(
             r#"
             SELECT id, route_id, route_name, overlay_id, overlay_version, anchor_strategy,
-                   alignment, captured_at
+                   alignment, captured_at, review_status, reviewer_notes, reviewed_at
             FROM route_calibration_captures
             WHERE ($1::uuid IS NULL OR route_id = $1)
               AND ($2::uuid IS NULL OR overlay_id = $2)
@@ -664,6 +683,7 @@ impl PgGuideRepository {
             .map(|row| {
                 let anchor_strategy: String = row.try_get("anchor_strategy")?;
                 let alignment_json: serde_json::Value = row.try_get("alignment")?;
+                let review_status: String = row.try_get("review_status")?;
 
                 Ok(RouteCalibrationCapture {
                     id: row.try_get("id")?,
@@ -676,9 +696,122 @@ impl PgGuideRepository {
                     alignment: serde_json::from_value::<RouteArAlignment>(alignment_json)
                         .map_err(|error| RepositoryError::Decode(error.to_string()))?,
                     captured_at: row.try_get("captured_at")?,
+                    review_status: CalibrationReviewStatus::from_str(&review_status)
+                        .map_err(RepositoryError::Decode)?,
+                    reviewer_notes: row.try_get("reviewer_notes")?,
+                    reviewed_at: row.try_get("reviewed_at")?,
                 })
             })
             .collect()
+    }
+
+    async fn update_calibration_capture_review(
+        &self,
+        capture_id: Uuid,
+        review_status: CalibrationReviewStatus,
+        reviewer_notes: Option<String>,
+    ) -> RepositoryResult<Option<RouteCalibrationCapture>> {
+        let reviewed_at = Utc::now();
+        let row = sqlx::query(
+            r#"
+            UPDATE route_calibration_captures
+            SET review_status = $2,
+                reviewer_notes = $3,
+                reviewed_at = $4
+            WHERE id = $1
+            RETURNING route_id, overlay_id
+            "#,
+        )
+        .bind(capture_id)
+        .bind(review_status.to_string())
+        .bind(reviewer_notes)
+        .bind(reviewed_at)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let route_id = row.try_get("route_id")?;
+        let overlay_id = row.try_get("overlay_id")?;
+
+        Ok(self
+            .load_calibration_captures(Some(route_id), Some(overlay_id))
+            .await?
+            .into_iter()
+            .find(|capture| capture.id == capture_id))
+    }
+
+    async fn apply_calibration_capture(
+        &self,
+        overlay_id: Uuid,
+        capture_id: Uuid,
+    ) -> RepositoryResult<Option<RouteArOverlay>> {
+        let mut transaction = self.pool.begin().await?;
+
+        let capture_row = sqlx::query(
+            r#"
+            SELECT route_id, alignment
+            FROM route_calibration_captures
+            WHERE id = $1 AND overlay_id = $2
+            "#,
+        )
+        .bind(capture_id)
+        .bind(overlay_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        let Some(capture_row) = capture_row else {
+            transaction.commit().await?;
+            return Ok(None);
+        };
+
+        let route_id = capture_row.try_get("route_id")?;
+        let alignment: serde_json::Value = capture_row.try_get("alignment")?;
+        let reviewed_at = Utc::now();
+
+        let updated_overlay = sqlx::query(
+            r#"
+            UPDATE route_ar_overlays
+            SET default_alignment = $2,
+                confidence = 'field_tested',
+                reviewed_at = $3
+            WHERE id = $1
+            RETURNING id
+            "#,
+        )
+        .bind(overlay_id)
+        .bind(alignment)
+        .bind(reviewed_at)
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        if updated_overlay.is_none() {
+            transaction.commit().await?;
+            return Ok(None);
+        }
+
+        sqlx::query(
+            r#"
+            UPDATE route_calibration_captures
+            SET review_status = 'applied',
+                reviewed_at = $2
+            WHERE id = $1
+            "#,
+        )
+        .bind(capture_id)
+        .bind(reviewed_at)
+        .execute(&mut *transaction)
+        .await?;
+
+        transaction.commit().await?;
+
+        Ok(self
+            .load_overlays(route_id)
+            .await?
+            .into_iter()
+            .find(|overlay| overlay.id == overlay_id))
     }
 }
 
@@ -740,6 +873,24 @@ impl GuideRepository for PgGuideRepository {
         overlay_id: Option<Uuid>,
     ) -> RepositoryResult<Vec<RouteCalibrationCapture>> {
         self.load_calibration_captures(route_id, overlay_id).await
+    }
+
+    async fn review_calibration_capture(
+        &self,
+        capture_id: Uuid,
+        review_status: CalibrationReviewStatus,
+        reviewer_notes: Option<String>,
+    ) -> RepositoryResult<Option<RouteCalibrationCapture>> {
+        self.update_calibration_capture_review(capture_id, review_status, reviewer_notes)
+            .await
+    }
+
+    async fn apply_calibration_capture_to_overlay(
+        &self,
+        overlay_id: Uuid,
+        capture_id: Uuid,
+    ) -> RepositoryResult<Option<RouteArOverlay>> {
+        self.apply_calibration_capture(overlay_id, capture_id).await
     }
 }
 

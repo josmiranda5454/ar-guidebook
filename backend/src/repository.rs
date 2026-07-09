@@ -1,4 +1,7 @@
-use crate::models::{Area, OfflinePack, Route, RouteCalibrationCapture, Wall};
+use crate::models::{
+    Area, CalibrationReviewStatus, OfflinePack, Route, RouteArOverlay, RouteCalibrationCapture,
+    Wall,
+};
 use async_trait::async_trait;
 use std::{error::Error, fmt};
 use uuid::Uuid;
@@ -45,4 +48,15 @@ pub trait GuideRepository: Send + Sync {
         route_id: Option<Uuid>,
         overlay_id: Option<Uuid>,
     ) -> RepositoryResult<Vec<RouteCalibrationCapture>>;
+    async fn review_calibration_capture(
+        &self,
+        capture_id: Uuid,
+        review_status: CalibrationReviewStatus,
+        reviewer_notes: Option<String>,
+    ) -> RepositoryResult<Option<RouteCalibrationCapture>>;
+    async fn apply_calibration_capture_to_overlay(
+        &self,
+        overlay_id: Uuid,
+        capture_id: Uuid,
+    ) -> RepositoryResult<Option<RouteArOverlay>>;
 }

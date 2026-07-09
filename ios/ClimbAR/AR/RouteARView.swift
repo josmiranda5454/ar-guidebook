@@ -20,7 +20,7 @@ struct RouteARView: View {
         self.overlay = overlay
         let savedAlignment = RouteARAlignmentStore.load(routeId: route.id, overlayId: overlay.id)
         _alignment = State(
-            initialValue: savedAlignment
+            initialValue: savedAlignment ?? overlay.defaultAlignment ?? .zero
         )
         _captureCount = State(
             initialValue: RouteCalibrationCaptureStore.count(routeId: route.id, overlayId: overlay.id)
@@ -467,33 +467,11 @@ private struct RouteTraceProjector {
     }
 }
 
-private struct RouteARAlignment: Codable, Equatable {
-    var horizontalOffsetMeters: Float
-    var verticalOffsetMeters: Float
-    var depthOffsetMeters: Float
-    var scale: Float
-
-    static let zero = RouteARAlignment(
-        horizontalOffsetMeters: 0,
-        verticalOffsetMeters: 0,
-        depthOffsetMeters: 0,
-        scale: 1
-    )
-
-    var summary: String {
-        "x \(formatted(horizontalOffsetMeters))m  y \(formatted(verticalOffsetMeters))m  z \(formatted(depthOffsetMeters))m  scale \(String(format: "%.2f", scale))x"
-    }
-
-    private func formatted(_ value: Float) -> String {
-        String(format: "%+.1f", value)
-    }
-}
-
 private enum RouteARAlignmentStore {
-    static func load(routeId: UUID, overlayId: UUID) -> RouteARAlignment {
+    static func load(routeId: UUID, overlayId: UUID) -> RouteARAlignment? {
         guard let data = UserDefaults.standard.data(forKey: key(routeId: routeId, overlayId: overlayId)),
               let alignment = try? JSONDecoder().decode(RouteARAlignment.self, from: data) else {
-            return .zero
+            return nil
         }
 
         return alignment

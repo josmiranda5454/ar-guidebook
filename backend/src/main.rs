@@ -11,7 +11,10 @@ use axum::{
     Json, Router,
 };
 use db::PgGuideRepository;
-use models::{Area, OfflinePack, Route, RouteCalibrationCapture, Wall};
+use models::{
+    Area, CalibrationReviewStatus, OfflinePack, Route, RouteArOverlay, RouteCalibrationCapture,
+    Wall,
+};
 use repository::{GuideRepository, RepositoryError};
 use seed::SeedStore;
 use serde::Deserialize;
@@ -57,6 +60,14 @@ async fn main() {
         .route(
             "/api/v1/admin/ar-calibration-captures",
             get(list_calibration_captures).post(create_calibration_capture),
+        )
+        .route(
+            "/api/v1/admin/ar-calibration-captures/:capture_id/review",
+            axum::routing::post(review_calibration_capture),
+        )
+        .route(
+            "/api/v1/admin/ar-overlays/:overlay_id/apply-calibration/:capture_id",
+            axum::routing::post(apply_calibration_capture),
         )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
@@ -219,6 +230,39 @@ async fn create_calibration_capture(
         .await
         .map(|capture| (StatusCode::CREATED, Json(capture)))
         .map_err(status_from_repository_error)
+}
+
+#[derive(Deserialize)]
+struct ReviewCalibrationCaptureRequest {
+    review_status: CalibrationReviewStatus,
+    reviewer_notes: Option<String>,
+}
+
+async fn review_calibration_capture(
+    State(state): State<AppState>,
+    Path(capture_id): Path<Uuid>,
+    Json(review): Json<ReviewCalibrationCaptureRequest>,
+) -> Result<Json<RouteCalibrationCapture>, StatusCode> {
+    state
+        .repository
+        .review_calibration_capture(capture_id, review.review_status, review.reviewer_notes)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn apply_calibration_capture(
+    State(state): State<AppState>,
+    Path((overlay_id, capture_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<RouteArOverlay>, StatusCode> {
+    state
+        .repository
+        .apply_calibration_capture_to_overlay(overlay_id, capture_id)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 fn status_from_repository_error(error: RepositoryError) -> StatusCode {

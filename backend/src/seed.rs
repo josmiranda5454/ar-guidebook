@@ -1,7 +1,7 @@
 use crate::models::{
-    ArAnchorStrategy, Area, GeoPoint, GradeSystem, MediaAsset, MediaKind, OfflinePack,
-    OverlayConfidence, Route, RouteArOverlay, RouteCalibrationCapture, RouteTrace, RouteType,
-    TraceCoordinateSpace, TracePoint, Wall, WallPlaneEstimate,
+    ArAnchorStrategy, Area, CalibrationReviewStatus, GeoPoint, GradeSystem, MediaAsset, MediaKind,
+    OfflinePack, OverlayConfidence, Route, RouteArOverlay, RouteCalibrationCapture, RouteTrace,
+    RouteType, TraceCoordinateSpace, TracePoint, Wall, WallPlaneEstimate,
 };
 use crate::repository::{GuideRepository, RepositoryResult};
 use async_trait::async_trait;
@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use uuid::Uuid;
 
 pub struct SeedStore {
-    areas: Vec<Area>,
+    areas: Mutex<Vec<Area>>,
     calibration_captures: Mutex<Vec<RouteCalibrationCapture>>,
 }
 
@@ -97,6 +97,7 @@ impl SeedStore {
                         },
                     ],
                 },
+                default_alignment: None,
                 confidence: OverlayConfidence::Draft,
                 reviewed_at: None,
             }],
@@ -127,17 +128,22 @@ impl SeedStore {
         };
 
         Self {
-            areas: vec![area],
+            areas: Mutex::new(vec![area]),
             calibration_captures: Mutex::new(Vec::new()),
         }
     }
 
     pub fn areas_seed(&self) -> Vec<Area> {
-        self.areas.clone()
+        self.areas.lock().expect("seed area store lock").clone()
     }
 
     pub fn area_seed(&self, area_id: Uuid) -> Option<Area> {
-        self.areas.iter().find(|area| area.id == area_id).cloned()
+        self.areas
+            .lock()
+            .expect("seed area store lock")
+            .iter()
+            .find(|area| area.id == area_id)
+            .cloned()
     }
 
     pub fn offline_pack_seed(&self, area_id: Uuid) -> Option<OfflinePack> {
@@ -161,6 +167,8 @@ impl SeedStore {
 
     pub fn wall_seed(&self, wall_id: Uuid) -> Option<Wall> {
         self.areas
+            .lock()
+            .expect("seed area store lock")
             .iter()
             .flat_map(|area| area.walls.iter())
             .find(|wall| wall.id == wall_id)
@@ -169,6 +177,8 @@ impl SeedStore {
 
     pub fn route_seed(&self, route_id: Uuid) -> Option<Route> {
         self.areas
+            .lock()
+            .expect("seed area store lock")
             .iter()
             .flat_map(|area| area.walls.iter())
             .flat_map(|wall| wall.routes.iter())
@@ -183,6 +193,8 @@ impl SeedStore {
         }
 
         self.areas
+            .lock()
+            .expect("seed area store lock")
             .iter()
             .flat_map(|area| area.walls.iter())
             .flat_map(|wall| wall.routes.iter())
@@ -248,13 +260,78 @@ impl GuideRepository for SeedStore {
             .cloned()
             .collect())
     }
+
+    async fn review_calibration_capture(
+        &self,
+        capture_id: Uuid,
+        review_status: CalibrationReviewStatus,
+        reviewer_notes: Option<String>,
+    ) -> RepositoryResult<Option<RouteCalibrationCapture>> {
+        let mut captures = self
+            .calibration_captures
+            .lock()
+            .expect("calibration capture store lock");
+
+        let Some(capture) = captures.iter_mut().find(|capture| capture.id == capture_id) else {
+            return Ok(None);
+        };
+
+        capture.review_status = review_status;
+        capture.reviewer_notes = reviewer_notes;
+        capture.reviewed_at = Some(Utc::now());
+
+        Ok(Some(capture.clone()))
+    }
+
+    async fn apply_calibration_capture_to_overlay(
+        &self,
+        overlay_id: Uuid,
+        capture_id: Uuid,
+    ) -> RepositoryResult<Option<RouteArOverlay>> {
+        let alignment = {
+            let mut captures = self
+                .calibration_captures
+                .lock()
+                .expect("calibration capture store lock");
+
+            let Some(capture) = captures
+                .iter_mut()
+                .find(|capture| capture.id == capture_id && capture.overlay_id == overlay_id)
+            else {
+                return Ok(None);
+            };
+
+            capture.review_status = CalibrationReviewStatus::Applied;
+            capture.reviewed_at = Some(Utc::now());
+            capture.alignment.clone()
+        };
+
+        let mut areas = self.areas.lock().expect("seed area store lock");
+        for overlay in areas
+            .iter_mut()
+            .flat_map(|area| area.walls.iter_mut())
+            .flat_map(|wall| wall.routes.iter_mut())
+            .flat_map(|route| route.ar_overlays.iter_mut())
+        {
+            if overlay.id == overlay_id {
+                overlay.default_alignment = Some(alignment);
+                overlay.confidence = OverlayConfidence::FieldTested;
+                overlay.reviewed_at = Some(Utc::now());
+                return Ok(Some(overlay.clone()));
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::SeedStore;
     use crate::{
-        models::{ArAnchorStrategy, RouteArAlignment, RouteCalibrationCapture},
+        models::{
+            ArAnchorStrategy, CalibrationReviewStatus, RouteArAlignment, RouteCalibrationCapture,
+        },
         repository::GuideRepository,
     };
     use chrono::Utc;
@@ -320,6 +397,9 @@ mod tests {
                 scale: 1.1,
             },
             captured_at: Utc::now(),
+            review_status: CalibrationReviewStatus::Pending,
+            reviewer_notes: None,
+            reviewed_at: None,
         };
 
         store
@@ -340,5 +420,78 @@ mod tests {
             .expect("captures by overlay");
         assert_eq!(captures_by_overlay.len(), 1);
         assert_eq!(captures_by_overlay[0].id, capture.id);
+    }
+
+    #[tokio::test]
+    async fn seed_store_can_review_and_apply_ar_calibration() {
+        let store = SeedStore::new();
+        let route_id = Uuid::from_u128(0xcccccccc_cccc_cccc_cccc_cccccccccccc);
+        let overlay_id = Uuid::from_u128(0xdddddddd_dddd_dddd_dddd_dddddddddddd);
+        let capture = RouteCalibrationCapture {
+            id: Uuid::new_v4(),
+            route_id,
+            route_name: "Sample Arete".to_string(),
+            overlay_id,
+            overlay_version: 1,
+            anchor_strategy: ArAnchorStrategy::ManualAlignment,
+            alignment: RouteArAlignment {
+                horizontal_offset_meters: 0.4,
+                vertical_offset_meters: -0.1,
+                depth_offset_meters: 0.2,
+                scale: 1.05,
+            },
+            captured_at: Utc::now(),
+            review_status: CalibrationReviewStatus::Pending,
+            reviewer_notes: None,
+            reviewed_at: None,
+        };
+
+        store
+            .create_calibration_capture(capture.clone())
+            .await
+            .expect("capture calibration");
+
+        let reviewed = store
+            .review_calibration_capture(
+                capture.id,
+                CalibrationReviewStatus::GoodCandidate,
+                Some("Looks aligned from base stance.".to_string()),
+            )
+            .await
+            .expect("review capture")
+            .expect("reviewed capture");
+
+        assert!(matches!(
+            reviewed.review_status,
+            CalibrationReviewStatus::GoodCandidate
+        ));
+        assert_eq!(
+            reviewed.reviewer_notes.as_deref(),
+            Some("Looks aligned from base stance.")
+        );
+        assert!(reviewed.reviewed_at.is_some());
+
+        let overlay = store
+            .apply_calibration_capture_to_overlay(overlay_id, capture.id)
+            .await
+            .expect("apply calibration")
+            .expect("updated overlay");
+
+        let alignment = overlay.default_alignment.expect("default alignment");
+        assert_eq!(alignment.horizontal_offset_meters, 0.4);
+        assert_eq!(alignment.vertical_offset_meters, -0.1);
+        assert!(matches!(
+            overlay.confidence,
+            crate::models::OverlayConfidence::FieldTested
+        ));
+
+        let captures = store
+            .calibration_captures(Some(route_id), Some(overlay_id))
+            .await
+            .expect("captures");
+        assert!(matches!(
+            captures[0].review_status,
+            CalibrationReviewStatus::Applied
+        ));
     }
 }

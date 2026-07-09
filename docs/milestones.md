@@ -66,6 +66,9 @@ Exit criteria:
 
 Goal: Provide a separate admin workflow for route data and AR calibration.
 
+- Calibration capture upload API.
+- Calibration capture review status.
+- Apply reviewed calibration captures to AR overlay default alignment.
 - Admin authentication.
 - CRUD for areas, walls, and routes.
 - Photo and topo upload.
@@ -89,4 +92,3 @@ Goal: Prepare for TestFlight and field testing.
 Exit criteria:
 
 - TestFlight build is ready for controlled outdoor testing.
-

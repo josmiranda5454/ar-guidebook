@@ -9,8 +9,31 @@ struct RouteAROverlay: Codable, Identifiable, Hashable {
     let compassBearingDegrees: Float?
     let wallPlane: WallPlaneEstimate?
     let routeTrace: RouteTrace
+    let defaultAlignment: RouteARAlignment?
     let confidence: OverlayConfidence
     let reviewedAt: Date?
+}
+
+struct RouteARAlignment: Codable, Equatable, Hashable {
+    var horizontalOffsetMeters: Float
+    var verticalOffsetMeters: Float
+    var depthOffsetMeters: Float
+    var scale: Float
+
+    static let zero = RouteARAlignment(
+        horizontalOffsetMeters: 0,
+        verticalOffsetMeters: 0,
+        depthOffsetMeters: 0,
+        scale: 1
+    )
+
+    var summary: String {
+        "x \(formatted(horizontalOffsetMeters))m  y \(formatted(verticalOffsetMeters))m  z \(formatted(depthOffsetMeters))m  scale \(String(format: "%.2f", scale))x"
+    }
+
+    private func formatted(_ value: Float) -> String {
+        String(format: "%+.1f", value)
+    }
 }
 
 enum ARAnchorStrategy: String, Codable, Hashable {
@@ -47,4 +70,3 @@ enum OverlayConfidence: String, Codable, Hashable {
     case fieldTested = "field_tested"
     case reviewed
 }
-
