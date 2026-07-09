@@ -55,11 +55,13 @@ impl PgGuideRepository {
         sqlx::query(
             r#"
             INSERT INTO areas (
-                id, parent_area_id, name, slug, description, access_notes, location
+                id, parent_area_id, name, slug, description, access_notes, location,
+                elevation_meters
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6,
-                ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography
+                ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography,
+                $9
             )
             ON CONFLICT (id) DO UPDATE SET
                 parent_area_id = EXCLUDED.parent_area_id,
@@ -67,7 +69,8 @@ impl PgGuideRepository {
                 slug = EXCLUDED.slug,
                 description = EXCLUDED.description,
                 access_notes = EXCLUDED.access_notes,
-                location = EXCLUDED.location
+                location = EXCLUDED.location,
+                elevation_meters = EXCLUDED.elevation_meters
             "#,
         )
         .bind(area.id)
@@ -78,6 +81,7 @@ impl PgGuideRepository {
         .bind(&area.access_notes)
         .bind(area.location.longitude)
         .bind(area.location.latitude)
+        .bind(area.location.elevation_meters)
         .execute(&self.pool)
         .await?;
 
@@ -88,11 +92,13 @@ impl PgGuideRepository {
         sqlx::query(
             r#"
             INSERT INTO walls (
-                id, area_id, name, slug, description, approach_notes, aspect, location
+                id, area_id, name, slug, description, approach_notes, aspect, location,
+                elevation_meters
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7,
-                ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography
+                ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography,
+                $10
             )
             ON CONFLICT (id) DO UPDATE SET
                 area_id = EXCLUDED.area_id,
@@ -101,7 +107,8 @@ impl PgGuideRepository {
                 description = EXCLUDED.description,
                 approach_notes = EXCLUDED.approach_notes,
                 aspect = EXCLUDED.aspect,
-                location = EXCLUDED.location
+                location = EXCLUDED.location,
+                elevation_meters = EXCLUDED.elevation_meters
             "#,
         )
         .bind(wall.id)
@@ -113,6 +120,7 @@ impl PgGuideRepository {
         .bind(&wall.aspect)
         .bind(wall.location.longitude)
         .bind(wall.location.latitude)
+        .bind(wall.location.elevation_meters)
         .execute(&self.pool)
         .await?;
 
@@ -131,12 +139,13 @@ impl PgGuideRepository {
             INSERT INTO routes (
                 id, wall_id, name, slug, grade, grade_system, route_types, length_feet,
                 pitches, stars_average, rating_votes, first_ascent, description,
-                location_notes, protection_notes, safety_notes, location
+                location_notes, protection_notes, safety_notes, location, elevation_meters
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8,
                 $9, $10, $11, $12, $13, $14, $15, $16,
-                ST_SetSRID(ST_MakePoint($17, $18), 4326)::geography
+                ST_SetSRID(ST_MakePoint($17, $18), 4326)::geography,
+                $19
             )
             ON CONFLICT (id) DO UPDATE SET
                 wall_id = EXCLUDED.wall_id,
@@ -154,7 +163,8 @@ impl PgGuideRepository {
                 location_notes = EXCLUDED.location_notes,
                 protection_notes = EXCLUDED.protection_notes,
                 safety_notes = EXCLUDED.safety_notes,
-                location = EXCLUDED.location
+                location = EXCLUDED.location,
+                elevation_meters = EXCLUDED.elevation_meters
             "#,
         )
         .bind(route.id)
@@ -175,6 +185,7 @@ impl PgGuideRepository {
         .bind(&route.safety_notes)
         .bind(route.location.longitude)
         .bind(route.location.latitude)
+        .bind(route.location.elevation_meters)
         .execute(&self.pool)
         .await?;
 
@@ -215,19 +226,20 @@ impl PgGuideRepository {
         sqlx::query(
             r#"
             INSERT INTO route_ar_overlays (
-                id, route_id, version, anchor_strategy, gps_hint, compass_bearing_degrees,
-                wall_plane, route_trace, confidence, reviewed_at
+                id, route_id, version, anchor_strategy, gps_hint, gps_hint_elevation_meters,
+                compass_bearing_degrees, wall_plane, route_trace, confidence, reviewed_at
             )
             VALUES (
                 $1, $2, $3, $4,
                 ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography,
-                $7, $8, $9, $10, $11
+                $7, $8, $9, $10, $11, $12
             )
             ON CONFLICT (id) DO UPDATE SET
                 route_id = EXCLUDED.route_id,
                 version = EXCLUDED.version,
                 anchor_strategy = EXCLUDED.anchor_strategy,
                 gps_hint = EXCLUDED.gps_hint,
+                gps_hint_elevation_meters = EXCLUDED.gps_hint_elevation_meters,
                 compass_bearing_degrees = EXCLUDED.compass_bearing_degrees,
                 wall_plane = EXCLUDED.wall_plane,
                 route_trace = EXCLUDED.route_trace,
@@ -241,6 +253,7 @@ impl PgGuideRepository {
         .bind(overlay.anchor_strategy.to_string())
         .bind(overlay.gps_hint.longitude)
         .bind(overlay.gps_hint.latitude)
+        .bind(overlay.gps_hint.elevation_meters)
         .bind(overlay.compass_bearing_degrees)
         .bind(wall_plane)
         .bind(route_trace)
@@ -260,7 +273,7 @@ impl PgGuideRepository {
                 SELECT id, parent_area_id, name, slug, description, access_notes,
                        ST_Y(location::geometry) AS latitude,
                        ST_X(location::geometry) AS longitude,
-                       ST_Z(location::geometry) AS elevation_meters
+                       elevation_meters
                 FROM areas
                 WHERE id = $1
                 ORDER BY name
@@ -276,7 +289,7 @@ impl PgGuideRepository {
                 SELECT id, parent_area_id, name, slug, description, access_notes,
                        ST_Y(location::geometry) AS latitude,
                        ST_X(location::geometry) AS longitude,
-                       ST_Z(location::geometry) AS elevation_meters
+                       elevation_meters
                 FROM areas
                 ORDER BY name
                 "#,
@@ -312,7 +325,7 @@ impl PgGuideRepository {
             SELECT id, area_id, name, slug, description, approach_notes, aspect,
                    ST_Y(location::geometry) AS latitude,
                    ST_X(location::geometry) AS longitude,
-                   ST_Z(location::geometry) AS elevation_meters
+                   elevation_meters
             FROM walls
             WHERE area_id = $1
             ORDER BY name
@@ -351,7 +364,7 @@ impl PgGuideRepository {
                    location_notes, protection_notes, safety_notes,
                    ST_Y(location::geometry) AS latitude,
                    ST_X(location::geometry) AS longitude,
-                   ST_Z(location::geometry) AS elevation_meters
+                   elevation_meters
             FROM routes
             WHERE wall_id = $1
             ORDER BY name
@@ -431,7 +444,7 @@ impl PgGuideRepository {
             SELECT id, route_id, version, anchor_strategy,
                    ST_Y(gps_hint::geometry) AS latitude,
                    ST_X(gps_hint::geometry) AS longitude,
-                   ST_Z(gps_hint::geometry) AS elevation_meters,
+                   gps_hint_elevation_meters AS elevation_meters,
                    compass_bearing_degrees, wall_plane, route_trace, confidence, reviewed_at
             FROM route_ar_overlays
             WHERE route_id = $1
