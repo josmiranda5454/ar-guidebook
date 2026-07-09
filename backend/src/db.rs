@@ -356,6 +356,38 @@ impl PgGuideRepository {
         Ok(walls)
     }
 
+    async fn load_wall_by_id(&self, wall_id: Uuid) -> RepositoryResult<Option<Wall>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, area_id, name, slug, description, approach_notes, aspect,
+                   ST_Y(location::geometry) AS latitude,
+                   ST_X(location::geometry) AS longitude,
+                   elevation_meters
+            FROM walls
+            WHERE id = $1
+            "#,
+        )
+        .bind(wall_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        Ok(Some(Wall {
+            id: row.try_get("id")?,
+            area_id: row.try_get("area_id")?,
+            name: row.try_get("name")?,
+            slug: row.try_get("slug")?,
+            description: row.try_get("description")?,
+            approach_notes: row.try_get("approach_notes")?,
+            aspect: row.try_get("aspect")?,
+            location: geo_point_from_row(&row)?,
+            routes: self.load_routes(wall_id).await?,
+        }))
+    }
+
     async fn load_routes(&self, wall_id: Uuid) -> RepositoryResult<Vec<Route>> {
         let rows = sqlx::query(
             r#"
@@ -406,6 +438,88 @@ impl PgGuideRepository {
                 media: self.load_media(route_id).await?,
                 ar_overlays: self.load_overlays(route_id).await?,
             });
+        }
+
+        Ok(routes)
+    }
+
+    async fn load_route_by_id(&self, route_id: Uuid) -> RepositoryResult<Option<Route>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, wall_id, name, slug, grade, grade_system, route_types, length_feet,
+                   pitches, stars_average, rating_votes, first_ascent, description,
+                   location_notes, protection_notes, safety_notes,
+                   ST_Y(location::geometry) AS latitude,
+                   ST_X(location::geometry) AS longitude,
+                   elevation_meters
+            FROM routes
+            WHERE id = $1
+            "#,
+        )
+        .bind(route_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let grade_system: String = row.try_get("grade_system")?;
+        let route_type_values: Vec<String> = row.try_get("route_types")?;
+
+        Ok(Some(Route {
+            id: route_id,
+            wall_id: row.try_get("wall_id")?,
+            name: row.try_get("name")?,
+            slug: row.try_get("slug")?,
+            grade: row.try_get("grade")?,
+            grade_system: GradeSystem::from_str(&grade_system).map_err(RepositoryError::Decode)?,
+            route_types: route_type_values
+                .iter()
+                .map(|value| RouteType::from_str(value).map_err(RepositoryError::Decode))
+                .collect::<RepositoryResult<Vec<_>>>()?,
+            length_feet: optional_u16(row.try_get("length_feet")?)?,
+            pitches: optional_u8(row.try_get("pitches")?)?,
+            stars_average: row.try_get("stars_average")?,
+            rating_votes: required_u32(row.try_get("rating_votes")?)?,
+            first_ascent: row.try_get("first_ascent")?,
+            description: row.try_get("description")?,
+            location_notes: row.try_get("location_notes")?,
+            protection_notes: row.try_get("protection_notes")?,
+            safety_notes: row.try_get("safety_notes")?,
+            location: geo_point_from_row(&row)?,
+            media: self.load_media(route_id).await?,
+            ar_overlays: self.load_overlays(route_id).await?,
+        }))
+    }
+
+    async fn search_routes(&self, query: &str) -> RepositoryResult<Vec<Route>> {
+        let normalized_query = query.trim();
+        if normalized_query.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let rows = sqlx::query(
+            r#"
+            SELECT id
+            FROM routes
+            WHERE name ILIKE $1
+               OR grade ILIKE $1
+               OR description ILIKE $1
+               OR location_notes ILIKE $1
+            ORDER BY name
+            LIMIT 50
+            "#,
+        )
+        .bind(format!("%{normalized_query}%"))
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut routes = Vec::with_capacity(rows.len());
+        for row in rows {
+            if let Some(route) = self.load_route_by_id(row.try_get("id")?).await? {
+                routes.push(route);
+            }
         }
 
         Ok(routes)
@@ -496,6 +610,18 @@ impl GuideRepository for PgGuideRepository {
 
     async fn area(&self, area_id: Uuid) -> RepositoryResult<Option<Area>> {
         Ok(self.load_areas(Some(area_id)).await?.into_iter().next())
+    }
+
+    async fn wall(&self, wall_id: Uuid) -> RepositoryResult<Option<Wall>> {
+        self.load_wall_by_id(wall_id).await
+    }
+
+    async fn route(&self, route_id: Uuid) -> RepositoryResult<Option<Route>> {
+        self.load_route_by_id(route_id).await
+    }
+
+    async fn search(&self, query: &str) -> RepositoryResult<Vec<Route>> {
+        self.search_routes(query).await
     }
 
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {

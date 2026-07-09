@@ -3,19 +3,36 @@ import SwiftUI
 @MainActor
 final class AreaListViewModel: ObservableObject {
     @Published var areas: [Area] = []
+    @Published var downloadedAreaIds: Set<UUID> = []
     @Published var errorMessage: String?
 
-    private let api: ClimbARAPI
+    let api: ClimbARAPI
+    let packStore: OfflinePackStore
 
-    init(api: ClimbARAPI) {
+    init(api: ClimbARAPI, packStore: OfflinePackStore = OfflinePackStore()) {
         self.api = api
+        self.packStore = packStore
     }
 
     func load() async {
+        let cachedPacks = (try? await packStore.loadAll()) ?? []
+        let cachedAreas = cachedPacks.flatMap(\.areas)
+        downloadedAreaIds = Set(cachedPacks.map(\.areaId))
+
         do {
-            areas = try await api.areas()
+            let remoteAreas = try await api.areas()
+            areas = mergedAreas(remoteAreas: remoteAreas, cachedAreas: cachedAreas)
+            errorMessage = nil
         } catch {
-            errorMessage = "Could not load climbing areas."
+            areas = cachedAreas
+            errorMessage = cachedAreas.isEmpty ? "Could not load climbing areas." : "Showing downloaded areas."
+        }
+    }
+
+    private func mergedAreas(remoteAreas: [Area], cachedAreas: [Area]) -> [Area] {
+        let cachedById = Dictionary(uniqueKeysWithValues: cachedAreas.map { ($0.id, $0) })
+        return remoteAreas.map { area in
+            cachedById[area.id] ?? area
         }
     }
 }
@@ -26,8 +43,18 @@ struct AreaListView: View {
     var body: some View {
         NavigationStack {
             List(viewModel.areas) { area in
-                NavigationLink(area.name) {
-                    AreaDetailView(area: area)
+                NavigationLink {
+                    AreaDetailView(area: area, api: viewModel.api, packStore: viewModel.packStore)
+                } label: {
+                    HStack {
+                        Text(area.name)
+                        Spacer()
+                        if viewModel.downloadedAreaIds.contains(area.id) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundStyle(.green)
+                                .accessibilityLabel("Downloaded")
+                        }
+                    }
                 }
             }
             .navigationTitle("Climbing Areas")
@@ -42,4 +69,3 @@ struct AreaListView: View {
         }
     }
 }
-

@@ -1,4 +1,4 @@
-use crate::models::{Area, OfflinePack};
+use crate::models::{Area, OfflinePack, Route, Wall};
 use async_trait::async_trait;
 use std::{error::Error, fmt};
 use uuid::Uuid;
@@ -32,5 +32,8 @@ impl From<sqlx::Error> for RepositoryError {
 pub trait GuideRepository: Send + Sync {
     async fn areas(&self) -> RepositoryResult<Vec<Area>>;
     async fn area(&self, area_id: Uuid) -> RepositoryResult<Option<Area>>;
+    async fn wall(&self, wall_id: Uuid) -> RepositoryResult<Option<Wall>>;
+    async fn route(&self, route_id: Uuid) -> RepositoryResult<Option<Route>>;
+    async fn search(&self, query: &str) -> RepositoryResult<Vec<Route>>;
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>>;
 }

@@ -23,6 +23,24 @@ actor OfflinePackStore {
         return try decoder.decode(OfflinePack.self, from: data)
     }
 
+    func loadAll() throws -> [OfflinePack] {
+        guard fileManager.fileExists(atPath: packsDirectory.path) else {
+            return []
+        }
+
+        return try fileManager
+            .contentsOfDirectory(at: packsDirectory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url in
+                let data = try Data(contentsOf: url)
+                return try decoder.decode(OfflinePack.self, from: data)
+            }
+    }
+
+    func isDownloaded(areaId: UUID) -> Bool {
+        fileManager.fileExists(atPath: packURL(areaId: areaId).path)
+    }
+
     private var packsDirectory: URL {
         fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appending(path: "OfflinePacks", directoryHint: .isDirectory)
@@ -46,4 +64,3 @@ actor OfflinePackStore {
         return decoder
     }
 }
-

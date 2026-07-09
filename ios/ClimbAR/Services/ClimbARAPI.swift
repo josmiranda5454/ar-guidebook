@@ -11,12 +11,35 @@ struct ClimbARAPI {
         try await get(path: "areas/\(id.uuidString)")
     }
 
+    func wall(id: UUID) async throws -> Wall {
+        try await get(path: "walls/\(id.uuidString)")
+    }
+
+    func route(id: UUID) async throws -> Route {
+        try await get(path: "routes/\(id.uuidString)")
+    }
+
+    func search(query: String) async throws -> [Route] {
+        var components = URLComponents(url: baseURL.appending(path: "search"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+
+        guard let url = components.url else {
+            throw APIError.invalidURL
+        }
+
+        return try await get(url: url)
+    }
+
     func offlinePack(areaId: UUID) async throws -> OfflinePack {
         try await get(path: "offline-packs/areas/\(areaId.uuidString)")
     }
 
     private func get<T: Decodable>(path: String) async throws -> T {
         let url = baseURL.appending(path: path)
+        return try await get(url: url)
+    }
+
+    private func get<T: Decodable>(url: URL) async throws -> T {
         let (data, response) = try await URLSession.shared.data(from: url)
 
         guard let httpResponse = response as? HTTPURLResponse,
@@ -32,6 +55,6 @@ struct ClimbARAPI {
 }
 
 enum APIError: Error {
+    case invalidURL
     case requestFailed
 }
-

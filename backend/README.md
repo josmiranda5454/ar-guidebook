@@ -33,5 +33,7 @@ cargo run
 - `GET /health`
 - `GET /api/v1/areas`
 - `GET /api/v1/areas/{area_id}`
+- `GET /api/v1/walls/{wall_id}`
+- `GET /api/v1/routes/{route_id}`
+- `GET /api/v1/search?q={query}`
 - `GET /api/v1/offline-packs/areas/{area_id}`
-

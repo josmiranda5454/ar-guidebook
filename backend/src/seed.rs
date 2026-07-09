@@ -153,6 +153,42 @@ impl SeedStore {
             assets,
         })
     }
+
+    pub fn wall_seed(&self, wall_id: Uuid) -> Option<Wall> {
+        self.areas
+            .iter()
+            .flat_map(|area| area.walls.iter())
+            .find(|wall| wall.id == wall_id)
+            .cloned()
+    }
+
+    pub fn route_seed(&self, route_id: Uuid) -> Option<Route> {
+        self.areas
+            .iter()
+            .flat_map(|area| area.walls.iter())
+            .flat_map(|wall| wall.routes.iter())
+            .find(|route| route.id == route_id)
+            .cloned()
+    }
+
+    pub fn search_seed(&self, query: &str) -> Vec<Route> {
+        let normalized_query = query.trim().to_lowercase();
+        if normalized_query.is_empty() {
+            return Vec::new();
+        }
+
+        self.areas
+            .iter()
+            .flat_map(|area| area.walls.iter())
+            .flat_map(|wall| wall.routes.iter())
+            .filter(|route| {
+                route.name.to_lowercase().contains(&normalized_query)
+                    || route.grade.to_lowercase().contains(&normalized_query)
+                    || route.description.to_lowercase().contains(&normalized_query)
+            })
+            .cloned()
+            .collect()
+    }
 }
 
 #[async_trait]
@@ -163,6 +199,18 @@ impl GuideRepository for SeedStore {
 
     async fn area(&self, area_id: Uuid) -> RepositoryResult<Option<Area>> {
         Ok(self.area_seed(area_id))
+    }
+
+    async fn wall(&self, wall_id: Uuid) -> RepositoryResult<Option<Wall>> {
+        Ok(self.wall_seed(wall_id))
+    }
+
+    async fn route(&self, route_id: Uuid) -> RepositoryResult<Option<Route>> {
+        Ok(self.route_seed(route_id))
+    }
+
+    async fn search(&self, query: &str) -> RepositoryResult<Vec<Route>> {
+        Ok(self.search_seed(query))
     }
 
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
@@ -195,5 +243,23 @@ mod tests {
         assert_eq!(pack.version, 1);
         assert_eq!(pack.areas.len(), 1);
         assert_eq!(pack.assets.len(), 1);
+    }
+
+    #[test]
+    fn seed_store_can_find_wall_route_and_search() {
+        let store = SeedStore::new();
+
+        assert!(store
+            .wall_seed(uuid::Uuid::from_u128(
+                0xbbbbbbbb_bbbb_bbbb_bbbb_bbbbbbbbbbbb
+            ))
+            .is_some());
+        assert!(store
+            .route_seed(uuid::Uuid::from_u128(
+                0xcccccccc_cccc_cccc_cccc_cccccccccccc
+            ))
+            .is_some());
+        assert_eq!(store.search_seed("5.8").len(), 1);
+        assert_eq!(store.search_seed("arete").len(), 1);
     }
 }

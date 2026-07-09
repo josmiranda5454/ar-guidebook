@@ -4,16 +4,17 @@ mod repository;
 mod seed;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
     Json, Router,
 };
 use db::PgGuideRepository;
-use models::{Area, OfflinePack};
+use models::{Area, OfflinePack, Route, Wall};
 use repository::{GuideRepository, RepositoryError};
 use seed::SeedStore;
+use serde::Deserialize;
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -49,6 +50,9 @@ async fn main() {
         .route("/health", get(health))
         .route("/api/v1/areas", get(list_areas))
         .route("/api/v1/areas/:area_id", get(get_area))
+        .route("/api/v1/walls/:wall_id", get(get_wall))
+        .route("/api/v1/routes/:route_id", get(get_route))
+        .route("/api/v1/search", get(search_routes))
         .route("/api/v1/offline-packs/areas/:area_id", get(get_area_pack))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
@@ -126,6 +130,49 @@ async fn get_area(
         .map_err(status_from_repository_error)?
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn get_wall(
+    State(state): State<AppState>,
+    Path(wall_id): Path<Uuid>,
+) -> Result<Json<Wall>, StatusCode> {
+    state
+        .repository
+        .wall(wall_id)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn get_route(
+    State(state): State<AppState>,
+    Path(route_id): Path<Uuid>,
+) -> Result<Json<Route>, StatusCode> {
+    state
+        .repository
+        .route(route_id)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
+}
+
+async fn search_routes(
+    State(state): State<AppState>,
+    Query(query): Query<SearchQuery>,
+) -> Result<Json<Vec<Route>>, StatusCode> {
+    state
+        .repository
+        .search(&query.q)
+        .await
+        .map(Json)
+        .map_err(status_from_repository_error)
 }
 
 async fn get_area_pack(

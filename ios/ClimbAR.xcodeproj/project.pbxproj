@@ -13,6 +13,7 @@
 		010000000000000000000004 /* ClimbARAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000104 /* ClimbARAPI.swift */; };
 		010000000000000000000005 /* OfflinePackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000105 /* OfflinePackStore.swift */; };
 		010000000000000000000006 /* RouteProximityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000106 /* RouteProximityService.swift */; };
+		01000000000000000000000D /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01000000000000000000010F /* LocationService.swift */; };
 		010000000000000000000007 /* AreaListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000107 /* AreaListView.swift */; };
 		010000000000000000000008 /* AreaDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000108 /* AreaDetailView.swift */; };
 		010000000000000000000009 /* WallDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000109 /* WallDetailView.swift */; };
@@ -28,6 +29,7 @@
 		010000000000000000000104 /* ClimbARAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/ClimbARAPI.swift; sourceTree = "<group>"; };
 		010000000000000000000105 /* OfflinePackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/OfflinePackStore.swift; sourceTree = "<group>"; };
 		010000000000000000000106 /* RouteProximityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/RouteProximityService.swift; sourceTree = "<group>"; };
+		01000000000000000000010F /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/LocationService.swift; sourceTree = "<group>"; };
 		010000000000000000000107 /* AreaListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/AreaListView.swift; sourceTree = "<group>"; };
 		010000000000000000000108 /* AreaDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/AreaDetailView.swift; sourceTree = "<group>"; };
 		010000000000000000000109 /* WallDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/WallDetailView.swift; sourceTree = "<group>"; };
@@ -66,6 +68,7 @@
 				010000000000000000000104 /* ClimbARAPI.swift */,
 				010000000000000000000105 /* OfflinePackStore.swift */,
 				010000000000000000000106 /* RouteProximityService.swift */,
+				01000000000000000000010F /* LocationService.swift */,
 				010000000000000000000107 /* AreaListView.swift */,
 				010000000000000000000108 /* AreaDetailView.swift */,
 				010000000000000000000109 /* WallDetailView.swift */,
@@ -160,6 +163,7 @@
 				010000000000000000000004 /* ClimbARAPI.swift in Sources */,
 				010000000000000000000005 /* OfflinePackStore.swift in Sources */,
 				010000000000000000000006 /* RouteProximityService.swift in Sources */,
+				01000000000000000000000D /* LocationService.swift in Sources */,
 				010000000000000000000007 /* AreaListView.swift in Sources */,
 				010000000000000000000008 /* AreaDetailView.swift in Sources */,
 				010000000000000000000009 /* WallDetailView.swift in Sources */,
@@ -352,4 +356,3 @@
 	};
 	rootObject = 010000000000000000000601 /* Project object */;
 }
-
