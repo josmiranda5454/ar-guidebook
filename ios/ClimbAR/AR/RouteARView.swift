@@ -9,6 +9,9 @@ struct RouteARView: View {
     @State private var alignment: RouteARAlignment
     @State private var captureCount: Int
     @State private var captureMessage: String?
+    @State private var uploadMessage: String?
+    @State private var isUploading = false
+    @State private var latestCapture: RouteCalibrationCapture?
     @State private var latestCaptureJSON: String?
 
     init(route: Route, overlay: RouteAROverlay) {
@@ -21,8 +24,12 @@ struct RouteARView: View {
         _captureCount = State(
             initialValue: RouteCalibrationCaptureStore.count(routeId: route.id, overlayId: overlay.id)
         )
+        let latestCapture = RouteCalibrationCaptureStore.latest(routeId: route.id, overlayId: overlay.id)
+        _latestCapture = State(
+            initialValue: latestCapture
+        )
         _latestCaptureJSON = State(
-            initialValue: RouteCalibrationCaptureStore.latestJSON(routeId: route.id, overlayId: overlay.id)
+            initialValue: latestCapture.flatMap(RouteCalibrationCaptureStore.jsonString(for:))
         )
     }
 
@@ -63,6 +70,25 @@ struct RouteARView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                }
+
+                if latestCapture != nil {
+                    Button {
+                        Task {
+                            await uploadLatestCapture()
+                        }
+                    } label: {
+                        Label("Upload Latest Snapshot", systemImage: "icloud.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isUploading)
+                }
+
+                if let uploadMessage {
+                    Text(uploadMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -109,8 +135,29 @@ struct RouteARView: View {
             alignment: alignment
         )
         captureCount = RouteCalibrationCaptureStore.save(capture)
+        latestCapture = capture
         latestCaptureJSON = RouteCalibrationCaptureStore.jsonString(for: capture)
         captureMessage = "Saved calibration snapshot \(capture.capturedAt.formatted(date: .abbreviated, time: .shortened))."
+        uploadMessage = nil
+    }
+
+    private func uploadLatestCapture() async {
+        guard let latestCapture else {
+            return
+        }
+
+        isUploading = true
+        defer { isUploading = false }
+
+        do {
+            try await ClimbARAPI().post(
+                path: "admin/ar-calibration-captures",
+                body: latestCapture
+            )
+            uploadMessage = "Uploaded latest calibration snapshot."
+        } catch {
+            uploadMessage = "Upload failed. Check that the backend is reachable."
+        }
     }
 }
 
@@ -419,6 +466,10 @@ private enum RouteCalibrationCaptureStore {
         load(routeId: routeId, overlayId: overlayId).count
     }
 
+    static func latest(routeId: UUID, overlayId: UUID) -> RouteCalibrationCapture? {
+        load(routeId: routeId, overlayId: overlayId).last
+    }
+
     static func latestJSON(routeId: UUID, overlayId: UUID) -> String? {
         load(routeId: routeId, overlayId: overlayId).last.flatMap(jsonString(for:))
     }
@@ -426,6 +477,7 @@ private enum RouteCalibrationCaptureStore {
     static func jsonString(for capture: RouteCalibrationCapture) -> String? {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        encoder.keyEncodingStrategy = .convertToSnakeCase
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         guard let data = try? encoder.encode(capture) else {

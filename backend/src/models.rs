@@ -190,6 +190,26 @@ pub struct RouteArOverlay {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RouteArAlignment {
+    pub horizontal_offset_meters: f32,
+    pub vertical_offset_meters: f32,
+    pub depth_offset_meters: f32,
+    pub scale: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RouteCalibrationCapture {
+    pub id: Uuid,
+    pub route_id: Uuid,
+    pub route_name: String,
+    pub overlay_id: Uuid,
+    pub overlay_version: u32,
+    pub anchor_strategy: ArAnchorStrategy,
+    pub alignment: RouteArAlignment,
+    pub captured_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArAnchorStrategy {
     ManualAlignment,

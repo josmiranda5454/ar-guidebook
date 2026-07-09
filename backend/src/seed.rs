@@ -1,15 +1,17 @@
 use crate::models::{
     ArAnchorStrategy, Area, GeoPoint, GradeSystem, MediaAsset, MediaKind, OfflinePack,
-    OverlayConfidence, Route, RouteArOverlay, RouteTrace, RouteType, TraceCoordinateSpace,
-    TracePoint, Wall, WallPlaneEstimate,
+    OverlayConfidence, Route, RouteArOverlay, RouteCalibrationCapture, RouteTrace, RouteType,
+    TraceCoordinateSpace, TracePoint, Wall, WallPlaneEstimate,
 };
 use crate::repository::{GuideRepository, RepositoryResult};
 use async_trait::async_trait;
 use chrono::Utc;
+use std::sync::Mutex;
 use uuid::Uuid;
 
 pub struct SeedStore {
     areas: Vec<Area>,
+    calibration_captures: Mutex<Vec<RouteCalibrationCapture>>,
 }
 
 impl SeedStore {
@@ -124,7 +126,10 @@ impl SeedStore {
             walls: vec![wall],
         };
 
-        Self { areas: vec![area] }
+        Self {
+            areas: vec![area],
+            calibration_captures: Mutex::new(Vec::new()),
+        }
     }
 
     pub fn areas_seed(&self) -> Vec<Area> {
@@ -216,11 +221,44 @@ impl GuideRepository for SeedStore {
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
         Ok(self.offline_pack_seed(area_id))
     }
+
+    async fn create_calibration_capture(
+        &self,
+        capture: RouteCalibrationCapture,
+    ) -> RepositoryResult<RouteCalibrationCapture> {
+        self.calibration_captures
+            .lock()
+            .expect("calibration capture store lock")
+            .push(capture.clone());
+        Ok(capture)
+    }
+
+    async fn calibration_captures(
+        &self,
+        route_id: Option<Uuid>,
+        overlay_id: Option<Uuid>,
+    ) -> RepositoryResult<Vec<RouteCalibrationCapture>> {
+        Ok(self
+            .calibration_captures
+            .lock()
+            .expect("calibration capture store lock")
+            .iter()
+            .filter(|capture| route_id.is_none_or(|route_id| capture.route_id == route_id))
+            .filter(|capture| overlay_id.is_none_or(|overlay_id| capture.overlay_id == overlay_id))
+            .cloned()
+            .collect())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::SeedStore;
+    use crate::{
+        models::{ArAnchorStrategy, RouteArAlignment, RouteCalibrationCapture},
+        repository::GuideRepository,
+    };
+    use chrono::Utc;
+    use uuid::Uuid;
 
     #[test]
     fn seed_data_has_area_wall_route_hierarchy() {
@@ -261,5 +299,46 @@ mod tests {
             .is_some());
         assert_eq!(store.search_seed("5.8").len(), 1);
         assert_eq!(store.search_seed("arete").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn seed_store_can_capture_ar_calibration() {
+        let store = SeedStore::new();
+        let route_id = Uuid::from_u128(0xcccccccc_cccc_cccc_cccc_cccccccccccc);
+        let overlay_id = Uuid::from_u128(0xdddddddd_dddd_dddd_dddd_dddddddddddd);
+        let capture = RouteCalibrationCapture {
+            id: Uuid::new_v4(),
+            route_id,
+            route_name: "Sample Arete".to_string(),
+            overlay_id,
+            overlay_version: 1,
+            anchor_strategy: ArAnchorStrategy::ManualAlignment,
+            alignment: RouteArAlignment {
+                horizontal_offset_meters: 0.1,
+                vertical_offset_meters: -0.2,
+                depth_offset_meters: 0.3,
+                scale: 1.1,
+            },
+            captured_at: Utc::now(),
+        };
+
+        store
+            .create_calibration_capture(capture.clone())
+            .await
+            .expect("capture calibration");
+
+        let captures_by_route = store
+            .calibration_captures(Some(route_id), None)
+            .await
+            .expect("captures by route");
+        assert_eq!(captures_by_route.len(), 1);
+        assert_eq!(captures_by_route[0].id, capture.id);
+
+        let captures_by_overlay = store
+            .calibration_captures(None, Some(overlay_id))
+            .await
+            .expect("captures by overlay");
+        assert_eq!(captures_by_overlay.len(), 1);
+        assert_eq!(captures_by_overlay[0].id, capture.id);
     }
 }

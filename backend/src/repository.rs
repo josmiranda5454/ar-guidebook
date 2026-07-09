@@ -1,4 +1,4 @@
-use crate::models::{Area, OfflinePack, Route, Wall};
+use crate::models::{Area, OfflinePack, Route, RouteCalibrationCapture, Wall};
 use async_trait::async_trait;
 use std::{error::Error, fmt};
 use uuid::Uuid;
@@ -36,4 +36,13 @@ pub trait GuideRepository: Send + Sync {
     async fn route(&self, route_id: Uuid) -> RepositoryResult<Option<Route>>;
     async fn search(&self, query: &str) -> RepositoryResult<Vec<Route>>;
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>>;
+    async fn create_calibration_capture(
+        &self,
+        capture: RouteCalibrationCapture,
+    ) -> RepositoryResult<RouteCalibrationCapture>;
+    async fn calibration_captures(
+        &self,
+        route_id: Option<Uuid>,
+        overlay_id: Option<Uuid>,
+    ) -> RepositoryResult<Vec<RouteCalibrationCapture>>;
 }

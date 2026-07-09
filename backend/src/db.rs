@@ -1,7 +1,8 @@
 use crate::{
     models::{
         ArAnchorStrategy, Area, GeoPoint, GradeSystem, MediaAsset, MediaKind, OfflinePack,
-        OverlayConfidence, Route, RouteArOverlay, RouteTrace, RouteType, Wall, WallPlaneEstimate,
+        OverlayConfidence, Route, RouteArAlignment, RouteArOverlay, RouteCalibrationCapture,
+        RouteTrace, RouteType, Wall, WallPlaneEstimate,
     },
     repository::{GuideRepository, RepositoryError, RepositoryResult},
 };
@@ -600,6 +601,85 @@ impl PgGuideRepository {
             })
             .collect()
     }
+
+    async fn insert_calibration_capture(
+        &self,
+        capture: &RouteCalibrationCapture,
+    ) -> RepositoryResult<()> {
+        let alignment = serde_json::to_value(&capture.alignment)
+            .map_err(|error| RepositoryError::Decode(error.to_string()))?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO route_calibration_captures (
+                id, route_id, route_name, overlay_id, overlay_version, anchor_strategy,
+                alignment, captured_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (id) DO UPDATE SET
+                route_id = EXCLUDED.route_id,
+                route_name = EXCLUDED.route_name,
+                overlay_id = EXCLUDED.overlay_id,
+                overlay_version = EXCLUDED.overlay_version,
+                anchor_strategy = EXCLUDED.anchor_strategy,
+                alignment = EXCLUDED.alignment,
+                captured_at = EXCLUDED.captured_at
+            "#,
+        )
+        .bind(capture.id)
+        .bind(capture.route_id)
+        .bind(&capture.route_name)
+        .bind(capture.overlay_id)
+        .bind(capture.overlay_version as i32)
+        .bind(capture.anchor_strategy.to_string())
+        .bind(alignment)
+        .bind(capture.captured_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn load_calibration_captures(
+        &self,
+        route_id: Option<Uuid>,
+        overlay_id: Option<Uuid>,
+    ) -> RepositoryResult<Vec<RouteCalibrationCapture>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, route_id, route_name, overlay_id, overlay_version, anchor_strategy,
+                   alignment, captured_at
+            FROM route_calibration_captures
+            WHERE ($1::uuid IS NULL OR route_id = $1)
+              AND ($2::uuid IS NULL OR overlay_id = $2)
+            ORDER BY captured_at DESC
+            "#,
+        )
+        .bind(route_id)
+        .bind(overlay_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|row| {
+                let anchor_strategy: String = row.try_get("anchor_strategy")?;
+                let alignment_json: serde_json::Value = row.try_get("alignment")?;
+
+                Ok(RouteCalibrationCapture {
+                    id: row.try_get("id")?,
+                    route_id: row.try_get("route_id")?,
+                    route_name: row.try_get("route_name")?,
+                    overlay_id: row.try_get("overlay_id")?,
+                    overlay_version: required_u32(row.try_get("overlay_version")?)?,
+                    anchor_strategy: ArAnchorStrategy::from_str(&anchor_strategy)
+                        .map_err(RepositoryError::Decode)?,
+                    alignment: serde_json::from_value::<RouteArAlignment>(alignment_json)
+                        .map_err(|error| RepositoryError::Decode(error.to_string()))?,
+                    captured_at: row.try_get("captured_at")?,
+                })
+            })
+            .collect()
+    }
 }
 
 #[async_trait]
@@ -644,6 +724,22 @@ impl GuideRepository for PgGuideRepository {
             areas: vec![area],
             assets,
         }))
+    }
+
+    async fn create_calibration_capture(
+        &self,
+        capture: RouteCalibrationCapture,
+    ) -> RepositoryResult<RouteCalibrationCapture> {
+        self.insert_calibration_capture(&capture).await?;
+        Ok(capture)
+    }
+
+    async fn calibration_captures(
+        &self,
+        route_id: Option<Uuid>,
+        overlay_id: Option<Uuid>,
+    ) -> RepositoryResult<Vec<RouteCalibrationCapture>> {
+        self.load_calibration_captures(route_id, overlay_id).await
     }
 }
 

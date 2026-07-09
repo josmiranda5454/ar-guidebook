@@ -34,6 +34,25 @@ struct ClimbARAPI {
         try await get(path: "offline-packs/areas/\(areaId.uuidString)")
     }
 
+    func post<T: Encodable>(path: String, body: T) async throws {
+        let url = baseURL.appending(path: path)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.httpBody = try encoder.encode(body)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw APIError.requestFailed
+        }
+    }
+
     private func get<T: Decodable>(path: String) async throws -> T {
         let url = baseURL.appending(path: path)
         return try await get(url: url)

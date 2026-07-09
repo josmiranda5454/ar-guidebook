@@ -11,7 +11,7 @@ use axum::{
     Json, Router,
 };
 use db::PgGuideRepository;
-use models::{Area, OfflinePack, Route, Wall};
+use models::{Area, OfflinePack, Route, RouteCalibrationCapture, Wall};
 use repository::{GuideRepository, RepositoryError};
 use seed::SeedStore;
 use serde::Deserialize;
@@ -54,6 +54,10 @@ async fn main() {
         .route("/api/v1/routes/:route_id", get(get_route))
         .route("/api/v1/search", get(search_routes))
         .route("/api/v1/offline-packs/areas/:area_id", get(get_area_pack))
+        .route(
+            "/api/v1/admin/ar-calibration-captures",
+            get(list_calibration_captures).post(create_calibration_capture),
+        )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -185,6 +189,36 @@ async fn get_area_pack(
         .map_err(status_from_repository_error)?
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
+}
+
+#[derive(Deserialize)]
+struct CalibrationCaptureQuery {
+    route_id: Option<Uuid>,
+    overlay_id: Option<Uuid>,
+}
+
+async fn list_calibration_captures(
+    State(state): State<AppState>,
+    Query(query): Query<CalibrationCaptureQuery>,
+) -> Result<Json<Vec<RouteCalibrationCapture>>, StatusCode> {
+    state
+        .repository
+        .calibration_captures(query.route_id, query.overlay_id)
+        .await
+        .map(Json)
+        .map_err(status_from_repository_error)
+}
+
+async fn create_calibration_capture(
+    State(state): State<AppState>,
+    Json(capture): Json<RouteCalibrationCapture>,
+) -> Result<(StatusCode, Json<RouteCalibrationCapture>), StatusCode> {
+    state
+        .repository
+        .create_calibration_capture(capture)
+        .await
+        .map(|capture| (StatusCode::CREATED, Json(capture)))
+        .map_err(status_from_repository_error)
 }
 
 fn status_from_repository_error(error: RepositoryError) -> StatusCode {
