@@ -7,12 +7,22 @@ struct RouteARView: View {
     let overlay: RouteAROverlay
 
     @State private var alignment: RouteARAlignment
+    @State private var captureCount: Int
+    @State private var captureMessage: String?
+    @State private var latestCaptureJSON: String?
 
     init(route: Route, overlay: RouteAROverlay) {
         self.route = route
         self.overlay = overlay
+        let savedAlignment = RouteARAlignmentStore.load(routeId: route.id, overlayId: overlay.id)
         _alignment = State(
-            initialValue: RouteARAlignmentStore.load(routeId: route.id, overlayId: overlay.id)
+            initialValue: savedAlignment
+        )
+        _captureCount = State(
+            initialValue: RouteCalibrationCaptureStore.count(routeId: route.id, overlayId: overlay.id)
+        )
+        _latestCaptureJSON = State(
+            initialValue: RouteCalibrationCaptureStore.latestJSON(routeId: route.id, overlayId: overlay.id)
         )
     }
 
@@ -34,6 +44,26 @@ struct RouteARView: View {
                     .foregroundStyle(.secondary)
 
                 RouteAlignmentControls(alignment: $alignment)
+
+                Button {
+                    saveCalibrationCapture()
+                } label: {
+                    Label("Save Calibration Snapshot", systemImage: "square.and.arrow.down")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Text(captureStatus)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                if let latestCaptureJSON {
+                    ShareLink(item: latestCaptureJSON) {
+                        Label("Share Latest Snapshot JSON", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
@@ -46,6 +76,18 @@ struct RouteARView: View {
         }
     }
 
+    private var captureStatus: String {
+        if let captureMessage {
+            return captureMessage
+        }
+
+        if captureCount == 0 {
+            return "No calibration snapshots saved for this route yet."
+        }
+
+        return "\(captureCount) calibration snapshot\(captureCount == 1 ? "" : "s") saved locally."
+    }
+
     private var alignmentHint: String {
         switch overlay.anchorStrategy {
         case .manualAlignment:
@@ -55,6 +97,20 @@ struct RouteARView: View {
         case .wallPlaneAndBearing:
             "Face the wall and let ARKit detect the plane before following the trace."
         }
+    }
+
+    private func saveCalibrationCapture() {
+        let capture = RouteCalibrationCapture(
+            routeId: route.id,
+            routeName: route.name,
+            overlayId: overlay.id,
+            overlayVersion: overlay.version,
+            anchorStrategy: overlay.anchorStrategy,
+            alignment: alignment
+        )
+        captureCount = RouteCalibrationCaptureStore.save(capture)
+        latestCaptureJSON = RouteCalibrationCaptureStore.jsonString(for: capture)
+        captureMessage = "Saved calibration snapshot \(capture.capturedAt.formatted(date: .abbreviated, time: .shortened))."
     }
 }
 
@@ -312,6 +368,84 @@ private enum RouteARAlignmentStore {
 
     private static func key(routeId: UUID, overlayId: UUID) -> String {
         "route-ar-alignment-\(routeId.uuidString)-\(overlayId.uuidString)"
+    }
+}
+
+private struct RouteCalibrationCapture: Codable, Identifiable, Equatable {
+    let id: UUID
+    let routeId: UUID
+    let routeName: String
+    let overlayId: UUID
+    let overlayVersion: UInt32
+    let anchorStrategy: ARAnchorStrategy
+    let alignment: RouteARAlignment
+    let capturedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        routeId: UUID,
+        routeName: String,
+        overlayId: UUID,
+        overlayVersion: UInt32,
+        anchorStrategy: ARAnchorStrategy,
+        alignment: RouteARAlignment,
+        capturedAt: Date = Date()
+    ) {
+        self.id = id
+        self.routeId = routeId
+        self.routeName = routeName
+        self.overlayId = overlayId
+        self.overlayVersion = overlayVersion
+        self.anchorStrategy = anchorStrategy
+        self.alignment = alignment
+        self.capturedAt = capturedAt
+    }
+}
+
+private enum RouteCalibrationCaptureStore {
+    static func save(_ capture: RouteCalibrationCapture) -> Int {
+        var captures = load(routeId: capture.routeId, overlayId: capture.overlayId)
+        captures.append(capture)
+
+        guard let data = try? JSONEncoder().encode(captures) else {
+            return captures.count - 1
+        }
+
+        UserDefaults.standard.set(data, forKey: key(routeId: capture.routeId, overlayId: capture.overlayId))
+        return captures.count
+    }
+
+    static func count(routeId: UUID, overlayId: UUID) -> Int {
+        load(routeId: routeId, overlayId: overlayId).count
+    }
+
+    static func latestJSON(routeId: UUID, overlayId: UUID) -> String? {
+        load(routeId: routeId, overlayId: overlayId).last.flatMap(jsonString(for:))
+    }
+
+    static func jsonString(for capture: RouteCalibrationCapture) -> String? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        guard let data = try? encoder.encode(capture) else {
+            return nil
+        }
+
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func load(routeId: UUID, overlayId: UUID) -> [RouteCalibrationCapture] {
+        guard let data = UserDefaults.standard.data(forKey: key(routeId: routeId, overlayId: overlayId)),
+              let captures = try? JSONDecoder().decode([RouteCalibrationCapture].self, from: data) else {
+            return []
+        }
+
+        return captures
+    }
+
+    private static func key(routeId: UUID, overlayId: UUID) -> String {
+        "route-ar-calibration-captures-\(routeId.uuidString)-\(overlayId.uuidString)"
     }
 }
 
