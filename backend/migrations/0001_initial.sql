@@ -46,6 +46,15 @@ CREATE TABLE routes (
     UNIQUE(wall_id, slug)
 );
 
+CREATE TABLE media_assets (
+    id uuid PRIMARY KEY,
+    route_id uuid NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
+    kind text NOT NULL,
+    title text NOT NULL,
+    url text NOT NULL,
+    offline_path text
+);
+
 CREATE TABLE route_ar_overlays (
     id uuid PRIMARY KEY,
     route_id uuid NOT NULL REFERENCES routes(id),
@@ -60,3 +69,10 @@ CREATE TABLE route_ar_overlays (
     UNIQUE(route_id, version)
 );
 
+CREATE INDEX areas_location_idx ON areas USING gist (location);
+CREATE INDEX walls_location_idx ON walls USING gist (location);
+CREATE INDEX routes_location_idx ON routes USING gist (location);
+CREATE INDEX walls_area_id_idx ON walls(area_id);
+CREATE INDEX routes_wall_id_idx ON routes(wall_id);
+CREATE INDEX media_assets_route_id_idx ON media_assets(route_id);
+CREATE INDEX route_ar_overlays_route_id_idx ON route_ar_overlays(route_id);

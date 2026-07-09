@@ -16,3 +16,26 @@ See [docs/milestones.md](docs/milestones.md) for the implementation roadmap.
 - `admin/` - Placeholder for the future route administration web app.
 - `docs/` - Product, architecture, and implementation notes.
 
+## Quick Start
+
+Backend with in-memory seed data:
+
+```sh
+cd backend
+cargo run
+```
+
+Backend with Postgres/PostGIS:
+
+```sh
+docker compose up -d postgres
+cd backend
+CLIMBAR_DATABASE_URL=postgres://climbar:climbar@127.0.0.1:5432/climbar cargo run -- import-seed
+CLIMBAR_DATABASE_URL=postgres://climbar:climbar@127.0.0.1:5432/climbar cargo run
+```
+
+Open the iOS app in Xcode:
+
+```sh
+open ios/ClimbAR.xcodeproj
+```

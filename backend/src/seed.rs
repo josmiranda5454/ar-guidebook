@@ -3,6 +3,8 @@ use crate::models::{
     OverlayConfidence, Route, RouteArOverlay, RouteTrace, RouteType, TraceCoordinateSpace,
     TracePoint, Wall, WallPlaneEstimate,
 };
+use crate::repository::{GuideRepository, RepositoryResult};
+use async_trait::async_trait;
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -125,16 +127,16 @@ impl SeedStore {
         Self { areas: vec![area] }
     }
 
-    pub fn areas(&self) -> Vec<Area> {
+    pub fn areas_seed(&self) -> Vec<Area> {
         self.areas.clone()
     }
 
-    pub fn area(&self, area_id: Uuid) -> Option<Area> {
+    pub fn area_seed(&self, area_id: Uuid) -> Option<Area> {
         self.areas.iter().find(|area| area.id == area_id).cloned()
     }
 
-    pub fn offline_pack(&self, area_id: Uuid) -> Option<OfflinePack> {
-        let area = self.area(area_id)?;
+    pub fn offline_pack_seed(&self, area_id: Uuid) -> Option<OfflinePack> {
+        let area = self.area_seed(area_id)?;
         let assets = area
             .walls
             .iter()
@@ -153,6 +155,21 @@ impl SeedStore {
     }
 }
 
+#[async_trait]
+impl GuideRepository for SeedStore {
+    async fn areas(&self) -> RepositoryResult<Vec<Area>> {
+        Ok(self.areas_seed())
+    }
+
+    async fn area(&self, area_id: Uuid) -> RepositoryResult<Option<Area>> {
+        Ok(self.area_seed(area_id))
+    }
+
+    async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
+        Ok(self.offline_pack_seed(area_id))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::SeedStore;
@@ -160,7 +177,7 @@ mod tests {
     #[test]
     fn seed_data_has_area_wall_route_hierarchy() {
         let store = SeedStore::new();
-        let areas = store.areas();
+        let areas = store.areas_seed();
 
         assert_eq!(areas.len(), 1);
         assert_eq!(areas[0].walls.len(), 1);
@@ -171,8 +188,8 @@ mod tests {
     #[test]
     fn offline_pack_contains_area_and_assets() {
         let store = SeedStore::new();
-        let area = store.areas().remove(0);
-        let pack = store.offline_pack(area.id).expect("area pack");
+        let area = store.areas_seed().remove(0);
+        let pack = store.offline_pack_seed(area.id).expect("area pack");
 
         assert_eq!(pack.area_id, area.id);
         assert_eq!(pack.version, 1);

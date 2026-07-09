@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -65,6 +66,29 @@ pub enum GradeSystem {
     French,
 }
 
+impl fmt::Display for GradeSystem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::YosemiteDecimal => "yosemite_decimal",
+            Self::Hueco => "hueco",
+            Self::French => "french",
+        })
+    }
+}
+
+impl FromStr for GradeSystem {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "yosemite_decimal" => Ok(Self::YosemiteDecimal),
+            "hueco" => Ok(Self::Hueco),
+            "french" => Ok(Self::French),
+            _ => Err(format!("unknown grade system: {value}")),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RouteType {
@@ -76,6 +100,39 @@ pub enum RouteType {
     Aid,
     Ice,
     Alpine,
+}
+
+impl fmt::Display for RouteType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Sport => "sport",
+            Self::Trad => "trad",
+            Self::Boulder => "boulder",
+            Self::Mixed => "mixed",
+            Self::TopRope => "top_rope",
+            Self::Aid => "aid",
+            Self::Ice => "ice",
+            Self::Alpine => "alpine",
+        })
+    }
+}
+
+impl FromStr for RouteType {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "sport" => Ok(Self::Sport),
+            "trad" => Ok(Self::Trad),
+            "boulder" => Ok(Self::Boulder),
+            "mixed" => Ok(Self::Mixed),
+            "top_rope" => Ok(Self::TopRope),
+            "aid" => Ok(Self::Aid),
+            "ice" => Ok(Self::Ice),
+            "alpine" => Ok(Self::Alpine),
+            _ => Err(format!("unknown route type: {value}")),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -93,6 +150,29 @@ pub enum MediaKind {
     Photo,
     Topo,
     Video,
+}
+
+impl fmt::Display for MediaKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Photo => "photo",
+            Self::Topo => "topo",
+            Self::Video => "video",
+        })
+    }
+}
+
+impl FromStr for MediaKind {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "photo" => Ok(Self::Photo),
+            "topo" => Ok(Self::Topo),
+            "video" => Ok(Self::Video),
+            _ => Err(format!("unknown media kind: {value}")),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -115,6 +195,29 @@ pub enum ArAnchorStrategy {
     ManualAlignment,
     ReferenceImage,
     WallPlaneAndBearing,
+}
+
+impl fmt::Display for ArAnchorStrategy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::ManualAlignment => "manual_alignment",
+            Self::ReferenceImage => "reference_image",
+            Self::WallPlaneAndBearing => "wall_plane_and_bearing",
+        })
+    }
+}
+
+impl FromStr for ArAnchorStrategy {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "manual_alignment" => Ok(Self::ManualAlignment),
+            "reference_image" => Ok(Self::ReferenceImage),
+            "wall_plane_and_bearing" => Ok(Self::WallPlaneAndBearing),
+            _ => Err(format!("unknown AR anchor strategy: {value}")),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -151,6 +254,29 @@ pub enum OverlayConfidence {
     Draft,
     FieldTested,
     Reviewed,
+}
+
+impl fmt::Display for OverlayConfidence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Draft => "draft",
+            Self::FieldTested => "field_tested",
+            Self::Reviewed => "reviewed",
+        })
+    }
+}
+
+impl FromStr for OverlayConfidence {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "draft" => Ok(Self::Draft),
+            "field_tested" => Ok(Self::FieldTested),
+            "reviewed" => Ok(Self::Reviewed),
+            _ => Err(format!("unknown overlay confidence: {value}")),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
