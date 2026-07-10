@@ -1,6 +1,6 @@
 # ClimbAR Admin
 
-Static admin UI for reviewing uploaded AR calibration captures.
+Static admin UI for guidebook editing and uploaded AR calibration capture review.
 
 ## Run Locally
 
@@ -24,6 +24,9 @@ base URL in the page.
 
 ## Current Capabilities
 
+- Browse area, wall, and route hierarchy.
+- Edit core route fields for existing routes.
+- Edit AR overlay placement metadata for existing overlays.
 - List uploaded AR calibration captures.
 - Filter captures by route ID or overlay ID.
 - Review captures as pending, good candidate, rejected, or applied.
@@ -32,7 +35,7 @@ base URL in the page.
 
 ## Planned Responsibilities
 
-- Area, wall, and route CRUD.
+- Create/delete flows for areas, walls, routes, and overlays.
 - Photo and topo upload.
 - Route trace editor.
 - Offline pack publishing.

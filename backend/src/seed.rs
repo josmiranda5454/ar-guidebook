@@ -234,6 +234,55 @@ impl GuideRepository for SeedStore {
         Ok(self.offline_pack_seed(area_id))
     }
 
+    async fn update_route(
+        &self,
+        route_id: Uuid,
+        mut route: Route,
+    ) -> RepositoryResult<Option<Route>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+
+        for existing_route in areas
+            .iter_mut()
+            .flat_map(|area| area.walls.iter_mut())
+            .flat_map(|wall| wall.routes.iter_mut())
+        {
+            if existing_route.id == route_id {
+                route.id = route_id;
+                route.wall_id = existing_route.wall_id;
+                route.media = existing_route.media.clone();
+                route.ar_overlays = existing_route.ar_overlays.clone();
+                *existing_route = route.clone();
+                return Ok(Some(route));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn update_ar_overlay(
+        &self,
+        overlay_id: Uuid,
+        mut overlay: RouteArOverlay,
+    ) -> RepositoryResult<Option<RouteArOverlay>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+
+        for existing_overlay in areas
+            .iter_mut()
+            .flat_map(|area| area.walls.iter_mut())
+            .flat_map(|wall| wall.routes.iter_mut())
+            .flat_map(|route| route.ar_overlays.iter_mut())
+        {
+            if existing_overlay.id == overlay_id {
+                overlay.id = overlay_id;
+                overlay.route_id = existing_overlay.route_id;
+                *existing_overlay = overlay.clone();
+                return Ok(Some(overlay));
+            }
+        }
+
+        Ok(None)
+    }
+
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,
@@ -420,6 +469,56 @@ mod tests {
             .expect("captures by overlay");
         assert_eq!(captures_by_overlay.len(), 1);
         assert_eq!(captures_by_overlay[0].id, capture.id);
+    }
+
+    #[tokio::test]
+    async fn seed_store_can_update_route_and_overlay() {
+        let store = SeedStore::new();
+        let route_id = Uuid::from_u128(0xcccccccc_cccc_cccc_cccc_cccccccccccc);
+        let overlay_id = Uuid::from_u128(0xdddddddd_dddd_dddd_dddd_dddddddddddd);
+
+        let mut route = store
+            .route(route_id)
+            .await
+            .expect("load route")
+            .expect("route");
+        route.name = "Edited Arete".to_string();
+        route.grade = "5.9".to_string();
+        route.description = "Edited route description.".to_string();
+
+        let updated_route = store
+            .update_route(route_id, route)
+            .await
+            .expect("update route")
+            .expect("updated route");
+
+        assert_eq!(updated_route.name, "Edited Arete");
+        assert_eq!(updated_route.grade, "5.9");
+        assert_eq!(updated_route.ar_overlays.len(), 1);
+
+        let mut overlay = updated_route.ar_overlays[0].clone();
+        overlay.compass_bearing_degrees = Some(190.0);
+        overlay.default_alignment = Some(RouteArAlignment {
+            horizontal_offset_meters: 0.2,
+            vertical_offset_meters: 0.1,
+            depth_offset_meters: -0.4,
+            scale: 1.2,
+        });
+
+        let updated_overlay = store
+            .update_ar_overlay(overlay_id, overlay)
+            .await
+            .expect("update overlay")
+            .expect("updated overlay");
+
+        assert_eq!(updated_overlay.compass_bearing_degrees, Some(190.0));
+        assert_eq!(
+            updated_overlay
+                .default_alignment
+                .expect("default alignment")
+                .scale,
+            1.2
+        );
     }
 
     #[tokio::test]

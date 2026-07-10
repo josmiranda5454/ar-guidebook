@@ -46,6 +46,8 @@ cargo run
 - `GET /api/v1/routes/{route_id}`
 - `GET /api/v1/search?q={query}`
 - `GET /api/v1/offline-packs/areas/{area_id}`
+- `PUT /api/v1/admin/routes/{route_id}`
+- `PUT /api/v1/admin/ar-overlays/{overlay_id}`
 - `GET /api/v1/admin/ar-calibration-captures?route_id={route_id}&overlay_id={overlay_id}`
 - `POST /api/v1/admin/ar-calibration-captures`
 - `POST /api/v1/admin/ar-calibration-captures/{capture_id}/review`

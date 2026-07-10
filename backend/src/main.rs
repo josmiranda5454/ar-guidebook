@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::get,
+    routing::{get, put},
     Json, Router,
 };
 use db::PgGuideRepository;
@@ -57,6 +57,11 @@ async fn main() {
         .route("/api/v1/routes/:route_id", get(get_route))
         .route("/api/v1/search", get(search_routes))
         .route("/api/v1/offline-packs/areas/:area_id", get(get_area_pack))
+        .route("/api/v1/admin/routes/:route_id", put(update_route))
+        .route(
+            "/api/v1/admin/ar-overlays/:overlay_id",
+            put(update_ar_overlay),
+        )
         .route(
             "/api/v1/admin/ar-calibration-captures",
             get(list_calibration_captures).post(create_calibration_capture),
@@ -196,6 +201,34 @@ async fn get_area_pack(
     state
         .repository
         .offline_pack(area_id)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn update_route(
+    State(state): State<AppState>,
+    Path(route_id): Path<Uuid>,
+    Json(route): Json<Route>,
+) -> Result<Json<Route>, StatusCode> {
+    state
+        .repository
+        .update_route(route_id, route)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn update_ar_overlay(
+    State(state): State<AppState>,
+    Path(overlay_id): Path<Uuid>,
+    Json(overlay): Json<RouteArOverlay>,
+) -> Result<Json<RouteArOverlay>, StatusCode> {
+    state
+        .repository
+        .update_ar_overlay(overlay_id, overlay)
         .await
         .map_err(status_from_repository_error)?
         .map(Json)

@@ -39,6 +39,12 @@ pub trait GuideRepository: Send + Sync {
     async fn route(&self, route_id: Uuid) -> RepositoryResult<Option<Route>>;
     async fn search(&self, query: &str) -> RepositoryResult<Vec<Route>>;
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>>;
+    async fn update_route(&self, route_id: Uuid, route: Route) -> RepositoryResult<Option<Route>>;
+    async fn update_ar_overlay(
+        &self,
+        overlay_id: Uuid,
+        overlay: RouteArOverlay,
+    ) -> RepositoryResult<Option<RouteArOverlay>>;
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,

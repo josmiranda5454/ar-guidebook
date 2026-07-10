@@ -11,7 +11,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">ClimbAR Admin</p>
-          <h1>Calibration Review</h1>
+          <h1>Guidebook Tools</h1>
         </div>
         <form id="api-form" class="api-form">
           <label for="api-base-url">API base URL</label>
@@ -28,15 +28,26 @@
         </form>
       </header>
 
-      <section class="filters" aria-label="Calibration capture filters">
-        <label>
-          Route ID
-          <input id="route-filter" type="text" placeholder="Optional route UUID" />
-        </label>
-        <label>
-          Overlay ID
-          <input id="overlay-filter" type="text" placeholder="Optional overlay UUID" />
-        </label>
+      <nav class="tabs" aria-label="Admin sections">
+        <button class="tab-button" type="button" data-view="guidebook" aria-selected="true">
+          Guidebook Editor
+        </button>
+        <button class="tab-button" type="button" data-view="calibration" aria-selected="false">
+          Calibration Review
+        </button>
+      </nav>
+
+      <section class="filters" aria-label="Admin filters and actions">
+        <div class="filter-group calibration-only">
+          <label>
+            Route ID
+            <input id="route-filter" type="text" placeholder="Optional route UUID" />
+          </label>
+          <label>
+            Overlay ID
+            <input id="overlay-filter" type="text" placeholder="Optional overlay UUID" />
+          </label>
+        </div>
         <button id="refresh-button" type="button">Refresh</button>
       </section>
 
@@ -44,7 +55,24 @@
         <span id="status-text">Ready to load calibration captures.</span>
       </section>
 
-      <section class="layout">
+      <section id="guidebook-view" class="layout">
+        <aside class="capture-list" aria-label="Guidebook routes">
+          <div class="list-heading">
+            <h2>Routes</h2>
+            <span id="route-count">0</span>
+          </div>
+          <div id="route-list" class="list-items"></div>
+        </aside>
+
+        <section id="route-editor" class="detail-panel" aria-label="Selected route editor">
+          <div class="empty-state">
+            <h2>No route selected</h2>
+            <p>Load guidebook data, then select a route to edit route and overlay fields.</p>
+          </div>
+        </section>
+      </section>
+
+      <section id="calibration-view" class="layout hidden">
         <aside class="capture-list" aria-label="Calibration captures">
           <div class="list-heading">
             <h2>Captures</h2>

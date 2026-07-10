@@ -31,8 +31,49 @@ export function applyCaptureUrl(apiBaseUrl, overlayId, captureId) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/ar-overlays/${overlayId}/apply-calibration/${captureId}`;
 }
 
+export function areasUrl(apiBaseUrl) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/areas`;
+}
+
+export function updateRouteUrl(apiBaseUrl, routeId) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/routes/${routeId}`;
+}
+
+export function updateOverlayUrl(apiBaseUrl, overlayId) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/ar-overlays/${overlayId}`;
+}
+
 export async function listCalibrationCaptures(apiBaseUrl, filters = {}, fetchImpl = fetch) {
   const response = await fetchImpl(calibrationCaptureListUrl(apiBaseUrl, filters));
+  return parseJsonResponse(response);
+}
+
+export async function listAreas(apiBaseUrl, fetchImpl = fetch) {
+  const response = await fetchImpl(areasUrl(apiBaseUrl));
+  return parseJsonResponse(response);
+}
+
+export async function updateRoute(apiBaseUrl, route, fetchImpl = fetch) {
+  const response = await fetchImpl(updateRouteUrl(apiBaseUrl, route.id), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(route),
+  });
+
+  return parseJsonResponse(response);
+}
+
+export async function updateOverlay(apiBaseUrl, overlay, fetchImpl = fetch) {
+  const response = await fetchImpl(updateOverlayUrl(apiBaseUrl, overlay.id), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(overlay),
+  });
+
   return parseJsonResponse(response);
 }
 

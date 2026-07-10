@@ -3,9 +3,14 @@ import { test } from "node:test";
 import {
   applyCalibrationCapture,
   applyCaptureUrl,
+  areasUrl,
   calibrationCaptureListUrl,
   reviewCalibrationCapture,
   reviewCaptureUrl,
+  updateOverlay,
+  updateOverlayUrl,
+  updateRoute,
+  updateRouteUrl,
 } from "../src/api.js";
 import { formatAlignment, formatReviewStatus } from "../src/format.js";
 
@@ -32,6 +37,21 @@ test("builds review and apply endpoint URLs", () => {
   );
 });
 
+test("builds guidebook editor endpoint URLs", () => {
+  assert.equal(
+    areasUrl("http://localhost:8080/api/v1/"),
+    "http://localhost:8080/api/v1/areas",
+  );
+  assert.equal(
+    updateRouteUrl("http://localhost:8080/api/v1", "route-1"),
+    "http://localhost:8080/api/v1/admin/routes/route-1",
+  );
+  assert.equal(
+    updateOverlayUrl("http://localhost:8080/api/v1", "overlay-1"),
+    "http://localhost:8080/api/v1/admin/ar-overlays/overlay-1",
+  );
+});
+
 test("review request sends expected JSON payload", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
@@ -51,6 +71,37 @@ test("review request sends expected JSON payload", async () => {
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     review_status: "good_candidate",
     reviewer_notes: "looks good",
+  });
+});
+
+test("route and overlay updates use PUT with JSON bodies", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return Response.json(JSON.parse(options.body));
+  };
+
+  await updateRoute(
+    "http://localhost:8080/api/v1",
+    { id: "route-1", name: "Edited Route" },
+    fetchImpl,
+  );
+  await updateOverlay(
+    "http://localhost:8080/api/v1",
+    { id: "overlay-1", confidence: "field_tested" },
+    fetchImpl,
+  );
+
+  assert.equal(calls[0].options.method, "PUT");
+  assert.equal(calls[0].options.headers["Content-Type"], "application/json");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    id: "route-1",
+    name: "Edited Route",
+  });
+  assert.equal(calls[1].options.method, "PUT");
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    id: "overlay-1",
+    confidence: "field_tested",
   });
 });
 

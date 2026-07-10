@@ -859,6 +859,46 @@ impl GuideRepository for PgGuideRepository {
         }))
     }
 
+    async fn update_route(
+        &self,
+        route_id: Uuid,
+        mut route: Route,
+    ) -> RepositoryResult<Option<Route>> {
+        if self.load_route_by_id(route_id).await?.is_none() {
+            return Ok(None);
+        }
+
+        route.id = route_id;
+        self.upsert_route(&route).await?;
+        self.load_route_by_id(route_id).await
+    }
+
+    async fn update_ar_overlay(
+        &self,
+        overlay_id: Uuid,
+        mut overlay: RouteArOverlay,
+    ) -> RepositoryResult<Option<RouteArOverlay>> {
+        let route_id = overlay.route_id;
+        let overlay_exists = self
+            .load_overlays(route_id)
+            .await?
+            .into_iter()
+            .any(|existing_overlay| existing_overlay.id == overlay_id);
+
+        if !overlay_exists {
+            return Ok(None);
+        }
+
+        overlay.id = overlay_id;
+        self.upsert_overlay(&overlay).await?;
+
+        Ok(self
+            .load_overlays(route_id)
+            .await?
+            .into_iter()
+            .find(|overlay| overlay.id == overlay_id))
+    }
+
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,
