@@ -27,6 +27,7 @@ base URL in the page.
 - Browse area, wall, and route hierarchy.
 - Edit core route fields for existing routes.
 - Edit AR overlay placement metadata for existing overlays.
+- Edit AR route trace coordinate space and trace points.
 - List uploaded AR calibration captures.
 - Filter captures by route ID or overlay ID.
 - Review captures as pending, good candidate, rejected, or applied.
@@ -37,5 +38,5 @@ base URL in the page.
 
 - Create/delete flows for areas, walls, routes, and overlays.
 - Photo and topo upload.
-- Route trace editor.
+- Visual route trace editor.
 - Offline pack publishing.

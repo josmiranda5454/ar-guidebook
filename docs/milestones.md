@@ -70,6 +70,7 @@ Goal: Provide a separate admin workflow for route data and AR calibration.
 - Calibration capture review status.
 - Apply reviewed calibration captures to AR overlay default alignment.
 - Admin editor for existing route fields and AR overlay placement metadata.
+- Text-based AR route trace editor for existing overlays.
 - Admin authentication.
 - CRUD for areas, walls, and routes.
 - Photo and topo upload.

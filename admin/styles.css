@@ -75,6 +75,11 @@ textarea {
   resize: vertical;
 }
 
+#trace-points {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  min-height: 150px;
+}
+
 label {
   color: var(--muted);
   display: grid;

@@ -13,6 +13,7 @@ import {
   updateRouteUrl,
 } from "../src/api.js";
 import { formatAlignment, formatReviewStatus } from "../src/format.js";
+import { parseTracePoints, tracePointsToText } from "../src/trace.js";
 
 test("builds calibration capture list URL with optional filters", () => {
   const url = calibrationCaptureListUrl("http://127.0.0.1:8080/api/v1/", {
@@ -137,4 +138,22 @@ test("format helpers make review data readable", () => {
     }),
     "x +0.1m  y -0.2m  z +0.0m  scale 1.05x",
   );
+});
+
+test("trace helpers serialize and parse route trace points", () => {
+  const text = tracePointsToText([
+    { x: 0.1, y: 0.9, z: null },
+    { x: 0.2, y: 0.7, z: -1.5 },
+  ]);
+
+  assert.equal(text, "0.1,0.9,\n0.2,0.7,-1.5");
+  assert.deepEqual(parseTracePoints(text), [
+    { x: 0.1, y: 0.9, z: null },
+    { x: 0.2, y: 0.7, z: -1.5 },
+  ]);
+});
+
+test("trace parser rejects incomplete traces", () => {
+  assert.throws(() => parseTracePoints("0.1,0.2"), /at least two points/);
+  assert.throws(() => parseTracePoints("0.1\n0.2,0.3"), /must be x,y or x,y,z/);
 });

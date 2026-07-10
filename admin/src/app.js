@@ -8,6 +8,7 @@ import {
   updateRoute,
 } from "./api.js";
 import { formatAlignment, formatDateTime, formatReviewStatus } from "./format.js";
+import { parseTracePoints, tracePointsToText } from "./trace.js";
 
 const state = {
   activeView: "guidebook",
@@ -233,7 +234,7 @@ function overlayEditor(overlay) {
   return `
     <section class="form-section">
       <h3>AR Overlay</h3>
-      <p class="muted">Editing overlay v${overlay.version}. Trace point editing comes next; this slice edits placement metadata.</p>
+      <p class="muted">Editing overlay v${overlay.version}. Trace points use one point per line as x,y,z. The z value is optional.</p>
 
       <div class="form-grid">
         ${selectField("overlay-confidence", "Confidence", ["draft", "field_tested", "reviewed"], overlay.confidence)}
@@ -246,6 +247,8 @@ function overlayEditor(overlay) {
         ${inputField("align-y", "Default align y", alignment.vertical_offset_meters, "number", "0.1")}
         ${inputField("align-z", "Default align z", alignment.depth_offset_meters, "number", "0.1")}
         ${inputField("align-scale", "Default scale", alignment.scale, "number", "0.05")}
+        ${selectField("trace-coordinate-space", "Trace coordinate space", ["normalized_wall_image", "local_wall_meters"], overlay.route_trace.coordinate_space)}
+        ${textareaField("trace-points", "Trace points", tracePointsToText(overlay.route_trace.points))}
       </div>
     </section>
   `;
@@ -325,6 +328,10 @@ function readOverlayForm(overlay) {
       vertical_offset_meters: requiredNumber("align-y"),
       depth_offset_meters: requiredNumber("align-z"),
       scale: requiredNumber("align-scale"),
+    },
+    route_trace: {
+      coordinate_space: value("trace-coordinate-space"),
+      points: parseTracePoints(value("trace-points")),
     },
   };
 }
