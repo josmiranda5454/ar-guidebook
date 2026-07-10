@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClimbAR Admin</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ClimbAR Admin</p>
+          <h1>Calibration Review</h1>
+        </div>
+        <form id="api-form" class="api-form">
+          <label for="api-base-url">API base URL</label>
+          <div class="api-controls">
+            <input
+              id="api-base-url"
+              name="api-base-url"
+              type="url"
+              value="http://127.0.0.1:8080/api/v1"
+              required
+            />
+            <button type="submit">Load</button>
+          </div>
+        </form>
+      </header>
+
+      <section class="filters" aria-label="Calibration capture filters">
+        <label>
+          Route ID
+          <input id="route-filter" type="text" placeholder="Optional route UUID" />
+        </label>
+        <label>
+          Overlay ID
+          <input id="overlay-filter" type="text" placeholder="Optional overlay UUID" />
+        </label>
+        <button id="refresh-button" type="button">Refresh</button>
+      </section>
+
+      <section class="status-strip" aria-live="polite">
+        <span id="status-text">Ready to load calibration captures.</span>
+      </section>
+
+      <section class="layout">
+        <aside class="capture-list" aria-label="Calibration captures">
+          <div class="list-heading">
+            <h2>Captures</h2>
+            <span id="capture-count">0</span>
+          </div>
+          <div id="capture-list" class="list-items"></div>
+        </aside>
+
+        <section id="capture-detail" class="detail-panel" aria-label="Selected capture">
+          <div class="empty-state">
+            <h2>No capture selected</h2>
+            <p>Load calibration captures, then select one to review or apply to an overlay.</p>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <template id="capture-row-template">
+      <button class="capture-row" type="button">
+        <span class="route-name"></span>
+        <span class="capture-meta"></span>
+        <span class="review-status"></span>
+      </button>
+    </template>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

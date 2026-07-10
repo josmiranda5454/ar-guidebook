@@ -13,7 +13,7 @@ See [docs/milestones.md](docs/milestones.md) for the implementation roadmap.
 
 - `backend/` - Rust API service for route data, offline packs, and admin access.
 - `ios/ClimbAR/` - Swift source skeleton for the native iOS app.
-- `admin/` - Placeholder for the future route administration web app.
+- `admin/` - Static admin UI for reviewing AR calibration captures.
 - `docs/` - Product, architecture, and implementation notes.
 
 ## Quick Start
@@ -41,6 +41,15 @@ open ios/ClimbAR.xcodeproj
 ```
 
 The simulator uses `http://127.0.0.1:8080/api/v1` by default.
+
+Run the admin calibration review UI:
+
+```sh
+cd admin
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`.
 
 For a physical iPhone, the backend must listen on your Mac's network interface:
 
