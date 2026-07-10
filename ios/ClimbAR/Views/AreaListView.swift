@@ -63,6 +63,9 @@ struct AreaListView: View {
                     ContentUnavailableView("Offline or Unavailable", systemImage: "wifi.slash", description: Text(errorMessage))
                 }
             }
+            .refreshable {
+                await viewModel.load()
+            }
         }
         .task {
             await viewModel.load()

@@ -52,6 +52,14 @@ final class RouteSearchViewModel: ObservableObject {
         statusMessage = routes.isEmpty ? "Downloaded routes will appear here." : "Showing downloaded routes."
     }
 
+    func refresh() async {
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            await loadDownloadedRoutes()
+        } else {
+            await search()
+        }
+    }
+
     private func searchDownloadedRoutes(query: String) async -> [Route] {
         let normalizedQuery = query.lowercased()
         let packs = (try? await packStore.loadAll()) ?? []
@@ -110,6 +118,9 @@ struct RouteSearchView: View {
                     Task { await viewModel.search() }
                 }
                 .disabled(viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .refreshable {
+                await viewModel.refresh()
             }
         }
         .task {

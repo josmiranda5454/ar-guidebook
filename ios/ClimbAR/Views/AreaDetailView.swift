@@ -43,6 +43,20 @@ final class AreaDetailViewModel: ObservableObject {
             statusMessage = "Could not download this area."
         }
     }
+
+    func refresh() async {
+        if isDownloaded {
+            await downloadArea()
+        } else {
+            do {
+                area = try await api.area(id: area.id)
+                statusMessage = "Area refreshed."
+            } catch {
+                await loadCachedPack()
+                statusMessage = "Could not refresh this area."
+            }
+        }
+    }
 }
 
 struct AreaDetailView: View {
@@ -93,6 +107,9 @@ struct AreaDetailView: View {
             }
         }
         .navigationTitle(viewModel.area.name)
+        .refreshable {
+            await viewModel.refresh()
+        }
         .task {
             await viewModel.loadCachedPack()
         }
