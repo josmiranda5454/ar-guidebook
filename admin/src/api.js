@@ -35,6 +35,22 @@ export function areasUrl(apiBaseUrl) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/areas`;
 }
 
+export function createAreaUrl(apiBaseUrl) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/areas`;
+}
+
+export function createWallUrl(apiBaseUrl) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/walls`;
+}
+
+export function createRouteUrl(apiBaseUrl) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/routes`;
+}
+
+export function createOverlayUrl(apiBaseUrl) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/ar-overlays`;
+}
+
 export function updateRouteUrl(apiBaseUrl, routeId) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/routes/${routeId}`;
 }
@@ -53,6 +69,22 @@ export async function listAreas(apiBaseUrl, fetchImpl = fetch) {
   return parseJsonResponse(response);
 }
 
+export async function createArea(apiBaseUrl, area, fetchImpl = fetch) {
+  return postJson(createAreaUrl(apiBaseUrl), area, fetchImpl);
+}
+
+export async function createWall(apiBaseUrl, wall, fetchImpl = fetch) {
+  return postJson(createWallUrl(apiBaseUrl), wall, fetchImpl);
+}
+
+export async function createRoute(apiBaseUrl, route, fetchImpl = fetch) {
+  return postJson(createRouteUrl(apiBaseUrl), route, fetchImpl);
+}
+
+export async function createOverlay(apiBaseUrl, overlay, fetchImpl = fetch) {
+  return postJson(createOverlayUrl(apiBaseUrl), overlay, fetchImpl);
+}
+
 export async function updateRoute(apiBaseUrl, route, fetchImpl = fetch) {
   const response = await fetchImpl(updateRouteUrl(apiBaseUrl, route.id), {
     method: "PUT",
@@ -60,6 +92,18 @@ export async function updateRoute(apiBaseUrl, route, fetchImpl = fetch) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(route),
+  });
+
+  return parseJsonResponse(response);
+}
+
+async function postJson(url, body, fetchImpl) {
+  const response = await fetchImpl(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
 
   return parseJsonResponse(response);

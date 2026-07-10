@@ -39,6 +39,13 @@ pub trait GuideRepository: Send + Sync {
     async fn route(&self, route_id: Uuid) -> RepositoryResult<Option<Route>>;
     async fn search(&self, query: &str) -> RepositoryResult<Vec<Route>>;
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>>;
+    async fn create_area(&self, area: Area) -> RepositoryResult<Area>;
+    async fn create_wall(&self, wall: Wall) -> RepositoryResult<Option<Wall>>;
+    async fn create_route(&self, route: Route) -> RepositoryResult<Option<Route>>;
+    async fn create_ar_overlay(
+        &self,
+        overlay: RouteArOverlay,
+    ) -> RepositoryResult<Option<RouteArOverlay>>;
     async fn update_route(&self, route_id: Uuid, route: Route) -> RepositoryResult<Option<Route>>;
     async fn update_ar_overlay(
         &self,

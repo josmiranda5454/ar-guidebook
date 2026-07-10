@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use db::PgGuideRepository;
@@ -57,6 +57,10 @@ async fn main() {
         .route("/api/v1/routes/:route_id", get(get_route))
         .route("/api/v1/search", get(search_routes))
         .route("/api/v1/offline-packs/areas/:area_id", get(get_area_pack))
+        .route("/api/v1/admin/areas", post(create_area))
+        .route("/api/v1/admin/walls", post(create_wall))
+        .route("/api/v1/admin/routes", post(create_route))
+        .route("/api/v1/admin/ar-overlays", post(create_ar_overlay))
         .route("/api/v1/admin/routes/:route_id", put(update_route))
         .route(
             "/api/v1/admin/ar-overlays/:overlay_id",
@@ -204,6 +208,57 @@ async fn get_area_pack(
         .await
         .map_err(status_from_repository_error)?
         .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn create_area(
+    State(state): State<AppState>,
+    Json(area): Json<Area>,
+) -> Result<(StatusCode, Json<Area>), StatusCode> {
+    state
+        .repository
+        .create_area(area)
+        .await
+        .map(|area| (StatusCode::CREATED, Json(area)))
+        .map_err(status_from_repository_error)
+}
+
+async fn create_wall(
+    State(state): State<AppState>,
+    Json(wall): Json<Wall>,
+) -> Result<(StatusCode, Json<Wall>), StatusCode> {
+    state
+        .repository
+        .create_wall(wall)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(|wall| (StatusCode::CREATED, Json(wall)))
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn create_route(
+    State(state): State<AppState>,
+    Json(route): Json<Route>,
+) -> Result<(StatusCode, Json<Route>), StatusCode> {
+    state
+        .repository
+        .create_route(route)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(|route| (StatusCode::CREATED, Json(route)))
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn create_ar_overlay(
+    State(state): State<AppState>,
+    Json(overlay): Json<RouteArOverlay>,
+) -> Result<(StatusCode, Json<RouteArOverlay>), StatusCode> {
+    state
+        .repository
+        .create_ar_overlay(overlay)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(|overlay| (StatusCode::CREATED, Json(overlay)))
         .ok_or(StatusCode::NOT_FOUND)
 }
 

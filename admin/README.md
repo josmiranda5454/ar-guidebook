@@ -25,6 +25,7 @@ base URL in the page.
 ## Current Capabilities
 
 - Browse area, wall, and route hierarchy.
+- Create draft areas, walls, routes, and first AR overlays.
 - Edit core route fields for existing routes.
 - Edit AR overlay placement metadata for existing overlays.
 - Edit AR route trace coordinate space and trace points.
@@ -36,7 +37,8 @@ base URL in the page.
 
 ## Planned Responsibilities
 
-- Create/delete flows for areas, walls, routes, and overlays.
+- Delete flows for areas, walls, routes, and overlays.
+- Rich create forms for areas, walls, routes, and overlays.
 - Photo and topo upload.
 - Visual route trace editor.
 - Offline pack publishing.

@@ -234,6 +234,61 @@ impl GuideRepository for SeedStore {
         Ok(self.offline_pack_seed(area_id))
     }
 
+    async fn create_area(&self, mut area: Area) -> RepositoryResult<Area> {
+        area.walls.clear();
+        self.areas
+            .lock()
+            .expect("seed area store lock")
+            .push(area.clone());
+        Ok(area)
+    }
+
+    async fn create_wall(&self, mut wall: Wall) -> RepositoryResult<Option<Wall>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+        let Some(area) = areas.iter_mut().find(|area| area.id == wall.area_id) else {
+            return Ok(None);
+        };
+
+        wall.routes.clear();
+        area.walls.push(wall.clone());
+        Ok(Some(wall))
+    }
+
+    async fn create_route(&self, mut route: Route) -> RepositoryResult<Option<Route>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+
+        for wall in areas.iter_mut().flat_map(|area| area.walls.iter_mut()) {
+            if wall.id == route.wall_id {
+                route.media.clear();
+                route.ar_overlays.clear();
+                wall.routes.push(route.clone());
+                return Ok(Some(route));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn create_ar_overlay(
+        &self,
+        overlay: RouteArOverlay,
+    ) -> RepositoryResult<Option<RouteArOverlay>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+
+        for route in areas
+            .iter_mut()
+            .flat_map(|area| area.walls.iter_mut())
+            .flat_map(|wall| wall.routes.iter_mut())
+        {
+            if route.id == overlay.route_id {
+                route.ar_overlays.push(overlay.clone());
+                return Ok(Some(overlay));
+            }
+        }
+
+        Ok(None)
+    }
+
     async fn update_route(
         &self,
         route_id: Uuid,
@@ -380,6 +435,7 @@ mod tests {
     use crate::{
         models::{
             ArAnchorStrategy, CalibrationReviewStatus, RouteArAlignment, RouteCalibrationCapture,
+            RouteTrace, TraceCoordinateSpace, TracePoint,
         },
         repository::GuideRepository,
     };
@@ -519,6 +575,130 @@ mod tests {
                 .scale,
             1.2
         );
+    }
+
+    #[tokio::test]
+    async fn seed_store_can_create_guidebook_hierarchy() {
+        let store = SeedStore::new();
+        let area_id = Uuid::new_v4();
+        let wall_id = Uuid::new_v4();
+        let route_id = Uuid::new_v4();
+        let overlay_id = Uuid::new_v4();
+        let location = crate::models::GeoPoint {
+            latitude: 34.0,
+            longitude: -116.0,
+            elevation_meters: Some(1200.0),
+        };
+
+        let area = store
+            .create_area(crate::models::Area {
+                id: area_id,
+                parent_area_id: None,
+                name: "New Area".to_string(),
+                slug: "new-area".to_string(),
+                description: "New area description.".to_string(),
+                access_notes: None,
+                location: location.clone(),
+                walls: vec![],
+            })
+            .await
+            .expect("create area");
+
+        assert_eq!(area.id, area_id);
+        assert!(area.walls.is_empty());
+
+        let wall = store
+            .create_wall(crate::models::Wall {
+                id: wall_id,
+                area_id,
+                name: "New Wall".to_string(),
+                slug: "new-wall".to_string(),
+                description: "New wall description.".to_string(),
+                approach_notes: None,
+                aspect: Some("North".to_string()),
+                location: location.clone(),
+                routes: vec![],
+            })
+            .await
+            .expect("create wall")
+            .expect("wall");
+
+        assert_eq!(wall.id, wall_id);
+        assert!(wall.routes.is_empty());
+
+        let route = store
+            .create_route(crate::models::Route {
+                id: route_id,
+                wall_id,
+                name: "New Route".to_string(),
+                slug: "new-route".to_string(),
+                grade: "5.7".to_string(),
+                grade_system: crate::models::GradeSystem::YosemiteDecimal,
+                route_types: vec![crate::models::RouteType::Sport],
+                length_feet: Some(60),
+                pitches: Some(1),
+                stars_average: None,
+                rating_votes: 0,
+                first_ascent: None,
+                description: "New route description.".to_string(),
+                location_notes: "Starts near the tree.".to_string(),
+                protection_notes: None,
+                safety_notes: None,
+                location: location.clone(),
+                media: vec![],
+                ar_overlays: vec![],
+            })
+            .await
+            .expect("create route")
+            .expect("route");
+
+        assert_eq!(route.id, route_id);
+        assert!(route.ar_overlays.is_empty());
+
+        let overlay = store
+            .create_ar_overlay(crate::models::RouteArOverlay {
+                id: overlay_id,
+                route_id,
+                version: 1,
+                anchor_strategy: ArAnchorStrategy::ManualAlignment,
+                gps_hint: location,
+                compass_bearing_degrees: None,
+                wall_plane: None,
+                route_trace: RouteTrace {
+                    coordinate_space: TraceCoordinateSpace::NormalizedWallImage,
+                    points: vec![
+                        TracePoint {
+                            x: 0.45,
+                            y: 0.95,
+                            z: None,
+                        },
+                        TracePoint {
+                            x: 0.55,
+                            y: 0.20,
+                            z: None,
+                        },
+                    ],
+                },
+                default_alignment: Some(RouteArAlignment {
+                    horizontal_offset_meters: 0.0,
+                    vertical_offset_meters: 0.0,
+                    depth_offset_meters: 0.0,
+                    scale: 1.0,
+                }),
+                confidence: crate::models::OverlayConfidence::Draft,
+                reviewed_at: None,
+            })
+            .await
+            .expect("create overlay")
+            .expect("overlay");
+
+        assert_eq!(overlay.id, overlay_id);
+        assert_eq!(overlay.route_trace.points.len(), 2);
+
+        let created_area = store.area(area_id).await.expect("load area").expect("area");
+        assert_eq!(created_area.walls.len(), 1);
+        assert_eq!(created_area.walls[0].routes.len(), 1);
+        assert_eq!(created_area.walls[0].routes[0].ar_overlays.len(), 1);
     }
 
     #[tokio::test]

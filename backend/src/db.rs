@@ -859,6 +859,54 @@ impl GuideRepository for PgGuideRepository {
         }))
     }
 
+    async fn create_area(&self, mut area: Area) -> RepositoryResult<Area> {
+        area.walls.clear();
+        self.upsert_area(&area).await?;
+
+        Ok(self
+            .area(area.id)
+            .await?
+            .expect("created area should be readable"))
+    }
+
+    async fn create_wall(&self, mut wall: Wall) -> RepositoryResult<Option<Wall>> {
+        if self.area(wall.area_id).await?.is_none() {
+            return Ok(None);
+        }
+
+        wall.routes.clear();
+        self.upsert_wall(&wall).await?;
+        self.wall(wall.id).await
+    }
+
+    async fn create_route(&self, mut route: Route) -> RepositoryResult<Option<Route>> {
+        if self.wall(route.wall_id).await?.is_none() {
+            return Ok(None);
+        }
+
+        route.media.clear();
+        route.ar_overlays.clear();
+        self.upsert_route(&route).await?;
+        self.route(route.id).await
+    }
+
+    async fn create_ar_overlay(
+        &self,
+        overlay: RouteArOverlay,
+    ) -> RepositoryResult<Option<RouteArOverlay>> {
+        if self.route(overlay.route_id).await?.is_none() {
+            return Ok(None);
+        }
+
+        self.upsert_overlay(&overlay).await?;
+
+        Ok(self
+            .load_overlays(overlay.route_id)
+            .await?
+            .into_iter()
+            .find(|existing_overlay| existing_overlay.id == overlay.id))
+    }
+
     async fn update_route(
         &self,
         route_id: Uuid,

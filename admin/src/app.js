@@ -1,12 +1,17 @@
 import {
   REVIEW_STATUSES,
   applyCalibrationCapture,
+  createArea,
+  createOverlay,
+  createRoute,
+  createWall,
   listAreas,
   listCalibrationCaptures,
   reviewCalibrationCapture,
   updateOverlay,
   updateRoute,
 } from "./api.js";
+import { draftArea, draftOverlay, draftRoute, draftWall } from "./drafts.js";
 import { formatAlignment, formatDateTime, formatReviewStatus } from "./format.js";
 import { parseTracePoints, tracePointsToText } from "./trace.js";
 
@@ -26,6 +31,10 @@ const elements = {
   tabButtons: [...document.querySelectorAll(".tab-button")],
   routeFilter: document.querySelector("#route-filter"),
   overlayFilter: document.querySelector("#overlay-filter"),
+  createAreaButton: document.querySelector("#create-area-button"),
+  createWallButton: document.querySelector("#create-wall-button"),
+  createRouteButton: document.querySelector("#create-route-button"),
+  createOverlayButton: document.querySelector("#create-overlay-button"),
   refreshButton: document.querySelector("#refresh-button"),
   statusText: document.querySelector("#status-text"),
   guidebookView: document.querySelector("#guidebook-view"),
@@ -47,6 +56,22 @@ elements.apiForm.addEventListener("submit", (event) => {
 
 elements.refreshButton.addEventListener("click", () => {
   loadActiveView();
+});
+
+elements.createAreaButton.addEventListener("click", () => {
+  createAreaFromPrompt();
+});
+
+elements.createWallButton.addEventListener("click", () => {
+  createWallFromPrompt();
+});
+
+elements.createRouteButton.addEventListener("click", () => {
+  createRouteFromPrompt();
+});
+
+elements.createOverlayButton.addEventListener("click", () => {
+  createOverlayForSelectedRoute();
 });
 
 for (const button of elements.tabButtons) {
@@ -118,6 +143,7 @@ function renderActiveView() {
 
   elements.guidebookView.classList.toggle("hidden", state.activeView !== "guidebook");
   elements.calibrationView.classList.toggle("hidden", state.activeView !== "calibration");
+  document.querySelector(".guidebook-only").classList.toggle("hidden", state.activeView !== "guidebook");
   document.querySelector(".calibration-only").classList.toggle("hidden", state.activeView !== "calibration");
 }
 
@@ -272,6 +298,114 @@ async function saveRoute(route) {
     setStatus("Route saved.");
   } catch (error) {
     setStatus(`Unable to save route: ${error.message}`);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function createAreaFromPrompt() {
+  const name = promptForName("New area name");
+  if (!name) {
+    return;
+  }
+
+  setBusy(true, "Creating area...");
+  try {
+    const area = await createArea(state.apiBaseUrl, draftArea(name));
+    state.areas = [...state.areas, area];
+    state.routes = flattenRoutes(state.areas);
+    state.selectedRouteId = null;
+    renderGuidebook();
+    setStatus(`Created area "${area.name}".`);
+  } catch (error) {
+    setStatus(`Unable to create area: ${error.message}`);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function createWallFromPrompt() {
+  const area = selectedRouteEntry()?.area ?? state.areas[0];
+  if (!area) {
+    setStatus("Create an area before creating a wall.");
+    return;
+  }
+
+  const name = promptForName(`New wall name under ${area.name}`);
+  if (!name) {
+    return;
+  }
+
+  setBusy(true, "Creating wall...");
+  try {
+    const wall = await createWall(state.apiBaseUrl, draftWall(name, area));
+    state.areas = state.areas.map((existingArea) =>
+      existingArea.id === area.id
+        ? { ...existingArea, walls: [...existingArea.walls, wall] }
+        : existingArea,
+    );
+    state.routes = flattenRoutes(state.areas);
+    renderGuidebook();
+    setStatus(`Created wall "${wall.name}".`);
+  } catch (error) {
+    setStatus(`Unable to create wall: ${error.message}`);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function createRouteFromPrompt() {
+  const entry = selectedRouteEntry();
+  const wall = entry?.wall ?? firstWall();
+  if (!wall) {
+    setStatus("Create a wall before creating a route.");
+    return;
+  }
+
+  const name = promptForName(`New route name under ${wall.name}`);
+  if (!name) {
+    return;
+  }
+
+  setBusy(true, "Creating route...");
+  try {
+    const route = await createRoute(state.apiBaseUrl, draftRoute(name, wall));
+    state.areas = state.areas.map((area) => ({
+      ...area,
+      walls: area.walls.map((existingWall) =>
+        existingWall.id === wall.id
+          ? { ...existingWall, routes: [...existingWall.routes, route] }
+          : existingWall,
+      ),
+    }));
+    state.routes = flattenRoutes(state.areas);
+    state.selectedRouteId = route.id;
+    renderGuidebook();
+    setStatus(`Created route "${route.name}".`);
+  } catch (error) {
+    setStatus(`Unable to create route: ${error.message}`);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function createOverlayForSelectedRoute() {
+  const entry = selectedRouteEntry();
+  if (!entry) {
+    setStatus("Select or create a route before creating an overlay.");
+    return;
+  }
+
+  setBusy(true, "Creating AR overlay...");
+  try {
+    const overlay = await createOverlay(state.apiBaseUrl, draftOverlay(entry.route));
+    replaceRoute({
+      ...entry.route,
+      ar_overlays: [overlay, ...entry.route.ar_overlays],
+    });
+    setStatus(`Created AR overlay v${overlay.version}.`);
+  } catch (error) {
+    setStatus(`Unable to create overlay: ${error.message}`);
   } finally {
     setBusy(false);
   }
@@ -552,6 +686,15 @@ function selectedCapture() {
   return state.captures.find((capture) => capture.id === state.selectedCaptureId) ?? null;
 }
 
+function firstWall() {
+  return state.areas.flatMap((area) => area.walls)[0] ?? null;
+}
+
+function promptForName(message) {
+  const name = window.prompt(message);
+  return name?.trim() || null;
+}
+
 function inputField(id, label, fieldValue, type = "text", step = "") {
   return `
     <label>
@@ -609,6 +752,10 @@ function setStatus(message) {
 
 function setBusy(isBusy, message) {
   elements.refreshButton.disabled = isBusy;
+  elements.createAreaButton.disabled = isBusy;
+  elements.createWallButton.disabled = isBusy;
+  elements.createRouteButton.disabled = isBusy;
+  elements.createOverlayButton.disabled = isBusy;
   elements.apiForm.querySelector("button").disabled = isBusy;
   if (message) {
     setStatus(message);

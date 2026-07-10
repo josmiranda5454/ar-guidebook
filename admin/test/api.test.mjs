@@ -5,6 +5,14 @@ import {
   applyCaptureUrl,
   areasUrl,
   calibrationCaptureListUrl,
+  createArea,
+  createAreaUrl,
+  createOverlay,
+  createOverlayUrl,
+  createRoute,
+  createRouteUrl,
+  createWall,
+  createWallUrl,
   reviewCalibrationCapture,
   reviewCaptureUrl,
   updateOverlay,
@@ -12,6 +20,7 @@ import {
   updateRoute,
   updateRouteUrl,
 } from "../src/api.js";
+import { draftArea, draftOverlay, draftRoute, draftWall, slugify } from "../src/drafts.js";
 import { formatAlignment, formatReviewStatus } from "../src/format.js";
 import { parseTracePoints, tracePointsToText } from "../src/trace.js";
 
@@ -50,6 +59,22 @@ test("builds guidebook editor endpoint URLs", () => {
   assert.equal(
     updateOverlayUrl("http://localhost:8080/api/v1", "overlay-1"),
     "http://localhost:8080/api/v1/admin/ar-overlays/overlay-1",
+  );
+  assert.equal(
+    createAreaUrl("http://localhost:8080/api/v1"),
+    "http://localhost:8080/api/v1/admin/areas",
+  );
+  assert.equal(
+    createWallUrl("http://localhost:8080/api/v1"),
+    "http://localhost:8080/api/v1/admin/walls",
+  );
+  assert.equal(
+    createRouteUrl("http://localhost:8080/api/v1"),
+    "http://localhost:8080/api/v1/admin/routes",
+  );
+  assert.equal(
+    createOverlayUrl("http://localhost:8080/api/v1"),
+    "http://localhost:8080/api/v1/admin/ar-overlays",
   );
 });
 
@@ -106,6 +131,26 @@ test("route and overlay updates use PUT with JSON bodies", async () => {
   });
 });
 
+test("guidebook create requests use POST with JSON bodies", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return Response.json(JSON.parse(options.body));
+  };
+
+  await createArea("http://localhost:8080/api/v1", { id: "area-1" }, fetchImpl);
+  await createWall("http://localhost:8080/api/v1", { id: "wall-1" }, fetchImpl);
+  await createRoute("http://localhost:8080/api/v1", { id: "route-1" }, fetchImpl);
+  await createOverlay("http://localhost:8080/api/v1", { id: "overlay-1" }, fetchImpl);
+
+  assert.deepEqual(
+    calls.map((call) => call.options.method),
+    ["POST", "POST", "POST", "POST"],
+  );
+  assert.deepEqual(JSON.parse(calls[2].options.body), { id: "route-1" });
+  assert.equal(calls[3].url, "http://localhost:8080/api/v1/admin/ar-overlays");
+});
+
 test("apply request posts to overlay endpoint", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
@@ -156,4 +201,21 @@ test("trace helpers serialize and parse route trace points", () => {
 test("trace parser rejects incomplete traces", () => {
   assert.throws(() => parseTracePoints("0.1,0.2"), /at least two points/);
   assert.throws(() => parseTracePoints("0.1\n0.2,0.3"), /must be x,y or x,y,z/);
+});
+
+test("draft helpers create valid guidebook hierarchy payloads", () => {
+  assert.equal(slugify(" The Main Wall! "), "the-main-wall");
+
+  const area = draftArea("Test Area");
+  const wall = draftWall("Test Wall", area);
+  const route = draftRoute("Test Route", wall);
+  const overlay = draftOverlay(route);
+
+  assert.equal(area.slug, "test-area");
+  assert.equal(wall.area_id, area.id);
+  assert.equal(route.wall_id, wall.id);
+  assert.equal(route.grade_system, "yosemite_decimal");
+  assert.equal(overlay.route_id, route.id);
+  assert.equal(overlay.version, 1);
+  assert.equal(overlay.route_trace.points.length, 2);
 });
