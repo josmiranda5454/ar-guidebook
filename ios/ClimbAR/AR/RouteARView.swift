@@ -14,6 +14,8 @@ struct RouteARView: View {
     @State private var latestCapture: RouteCalibrationCapture?
     @State private var latestCaptureJSON: String?
     @State private var isControlPanelExpanded = false
+    @State private var isRecorderLoginPresented = false
+    @State private var hasRecorderSession: Bool
 
     init(route: Route, overlay: RouteAROverlay) {
         self.route = route
@@ -32,6 +34,7 @@ struct RouteARView: View {
         _latestCaptureJSON = State(
             initialValue: latestCapture.flatMap(RouteCalibrationCaptureStore.jsonString(for:))
         )
+        _hasRecorderSession = State(initialValue: AppConfiguration.recorderSessionToken != nil)
     }
 
     var body: some View {
@@ -49,10 +52,11 @@ struct RouteARView: View {
                 uploadMessage: uploadMessage,
                 latestCaptureJSON: latestCaptureJSON,
                 hasLatestCapture: latestCapture != nil,
-                hasRecorderToken: AppConfiguration.recorderToken != nil,
+                hasRecorderSession: hasRecorderSession,
                 isUploading: isUploading,
                 saveCalibrationCapture: saveCalibrationCapture,
-                uploadLatestCapture: uploadLatestCapture
+                uploadLatestCapture: uploadLatestCapture,
+                presentRecorderLogin: { isRecorderLoginPresented = true }
             )
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
@@ -62,6 +66,13 @@ struct RouteARView: View {
         .toolbar(.hidden, for: .tabBar)
         .onChange(of: alignment) { _, newValue in
             RouteARAlignmentStore.save(newValue, routeId: route.id, overlayId: overlay.id)
+        }
+        .sheet(isPresented: $isRecorderLoginPresented) {
+            RecorderLoginView { email, password in
+                try await ClimbARAPI().loginRecorder(email: email, password: password)
+                hasRecorderSession = true
+                isRecorderLoginPresented = false
+            }
         }
     }
 
@@ -134,10 +145,11 @@ private struct RouteARControlPanel: View {
     let uploadMessage: String?
     let latestCaptureJSON: String?
     let hasLatestCapture: Bool
-    let hasRecorderToken: Bool
+    let hasRecorderSession: Bool
     let isUploading: Bool
     let saveCalibrationCapture: () -> Void
     let uploadLatestCapture: () async -> Void
+    let presentRecorderLogin: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -253,7 +265,16 @@ private struct RouteARControlPanel: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .disabled(isUploading || !hasRecorderToken)
+                .disabled(isUploading || !hasRecorderSession)
+                .overlay {
+                    if !hasRecorderSession {
+                        Button("Sign in to upload") {
+                            presentRecorderLogin()
+                        }
+                        .buttonStyle(.bordered)
+                        .background(.regularMaterial, in: Capsule())
+                    }
+                }
             }
         }
         .font(.caption.weight(.semibold))
@@ -264,8 +285,8 @@ private struct RouteARControlPanel: View {
     private var statusText: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(captureStatus)
-            if !hasRecorderToken {
-                Text("Uploads are disabled until a recorder token is configured for this build.")
+            if !hasRecorderSession {
+                Text("Sign in as a field recorder to upload this snapshot.")
             }
             if let uploadMessage {
                 Text(uploadMessage)
@@ -273,6 +294,55 @@ private struct RouteARControlPanel: View {
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
+    }
+}
+
+private struct RecorderLoginView: View {
+    let onLogin: (String, String) async throws -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var email = ""
+    @State private var password = ""
+    @State private var errorMessage: String?
+    @State private var isSubmitting = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Field recorder sign in") {
+                    TextField("Email", text: $email)
+                        .textContentType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("Password", text: $password)
+                        .textContentType(.password)
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                }
+
+                Button(isSubmitting ? "Signing in..." : "Sign in") {
+                    Task {
+                        isSubmitting = true
+                        defer { isSubmitting = false }
+                        do {
+                            try await onLogin(email, password)
+                            dismiss()
+                        } catch {
+                            errorMessage = "Unable to sign in. Check the recorder credentials and network."
+                        }
+                    }
+                }
+                .disabled(isSubmitting || email.isEmpty || password.isEmpty)
+            }
+            .navigationTitle("Recorder Access")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
     }
 }
 

@@ -20,7 +20,12 @@ use models::{
 use repository::{GuideRepository, RepositoryError};
 use seed::SeedStore;
 use serde::Deserialize;
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{Arc, RwLock},
+    time::Instant,
+};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
@@ -29,7 +34,7 @@ use uuid::Uuid;
 struct AppState {
     repository: Arc<dyn GuideRepository>,
     admin_token: String,
-    recorder_token: String,
+    recorder_sessions: Arc<RwLock<HashMap<String, Instant>>>,
 }
 
 #[tokio::main]
@@ -54,7 +59,7 @@ async fn main() {
     let state = AppState {
         repository: configure_repository().await,
         admin_token,
-        recorder_token: auth::configured_recorder_token(),
+        recorder_sessions: Arc::new(RwLock::new(HashMap::new())),
     };
 
     let app = Router::new()
@@ -67,6 +72,7 @@ async fn main() {
         .route("/api/v1/nearby/routes", get(nearby_routes))
         .route("/api/v1/offline-packs/areas/:area_id", get(get_area_pack))
         .route("/api/v1/admin/auth/login", post(admin_login))
+        .route("/api/v1/recorder/auth/login", post(recorder_login))
         .route(
             "/api/v1/admin/offline-packs/areas/:area_id/publish",
             post(publish_area_pack),
@@ -293,6 +299,26 @@ async fn admin_login(
         return Err(StatusCode::UNAUTHORIZED);
     }
     Ok(Json(serde_json::json!({ "token": token, "email": email })))
+}
+
+async fn recorder_login(
+    State(state): State<AppState>,
+    Json(login): Json<AdminLoginRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let (email, password) = auth::configured_recorder_credentials();
+    if login.email != email || login.password != password {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let (token, expires_at) = auth::issue_recorder_session(&state.recorder_sessions)?;
+    let expires_in_seconds = expires_at
+        .saturating_duration_since(Instant::now())
+        .as_secs();
+    Ok(Json(serde_json::json!({
+        "token": token,
+        "email": email,
+        "expires_in_seconds": expires_in_seconds,
+    })))
 }
 
 async fn publish_area_pack(

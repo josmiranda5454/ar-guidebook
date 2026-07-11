@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 struct ClimbARAPI {
     var baseURL = AppConfiguration.apiBaseURL
@@ -50,7 +51,7 @@ struct ClimbARAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = AppConfiguration.recorderToken {
+        if let token = AppConfiguration.recorderSessionToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -65,6 +66,23 @@ struct ClimbARAPI {
               (200..<300).contains(httpResponse.statusCode) else {
             throw APIError.requestFailed
         }
+    }
+
+    func loginRecorder(email: String, password: String) async throws {
+        let url = baseURL.appending(path: "recorder/auth/login")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["email": email, "password": password])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw APIError.requestFailed
+        }
+
+        let result = try JSONDecoder().decode(RecorderSessionResponse.self, from: data)
+        KeychainRecorderSession.save(result.token)
     }
 
     private func get<T: Decodable>(path: String) async throws -> T {
@@ -103,10 +121,44 @@ enum AppConfiguration {
         return url
     }
 
-    static var recorderToken: String? {
-        guard let value = Bundle.main.object(forInfoDictionaryKey: "CLIMBAR_RECORDER_TOKEN") as? String,
-              !value.isEmpty,
-              !value.contains("$(") else { return nil }
-        return value
+    static var recorderSessionToken: String? {
+        KeychainRecorderSession.load()
+    }
+}
+
+private struct RecorderSessionResponse: Decodable {
+    let token: String
+}
+
+private enum KeychainRecorderSession {
+    private static let service = "com.climbar.recorder-session"
+    private static let account = "current"
+
+    static func save(_ token: String) {
+        let data = Data(token.utf8)
+        let baseQuery: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account,
+        ]
+        SecItemDelete(baseQuery as CFDictionary)
+        var addQuery = baseQuery
+        addQuery[kSecValueData] = data
+        addQuery[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
+
+    static func load() -> String? {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account,
+            kSecReturnData: true,
+            kSecMatchLimit: kSecMatchLimitOne,
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 }

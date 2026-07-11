@@ -18,7 +18,8 @@ CLIMBAR_PORT=8080
 CLIMBAR_ADMIN_EMAIL=admin@example.com
 CLIMBAR_ADMIN_PASSWORD=change-me
 CLIMBAR_ADMIN_TOKEN=replace-with-a-long-random-token
-CLIMBAR_RECORDER_TOKEN=replace-with-a-different-long-random-token
+CLIMBAR_RECORDER_EMAIL=recorder@example.com
+CLIMBAR_RECORDER_PASSWORD=replace-with-a-different-strong-password
 CLIMBAR_ALLOWED_ORIGINS=https://your-admin-site.onrender.com
 CLIMBAR_ENV=production
 ```
@@ -50,6 +51,7 @@ The repository has two workflows:
 - `deploy.yml` builds `backend/Dockerfile`, publishes
   `ghcr.io/<owner>/<repository>/backend`, and creates a build provenance
   attestation on `main` pushes and version tags.
+- `ios.yml` builds the iOS simulator target without signing on macOS runners.
 
 To enable the guarded Render deployment job, create a GitHub **production**
 environment and add these settings:
@@ -59,8 +61,9 @@ environment and add these settings:
    Render deploy hook. Keep the hook secret and require approval for production
    deployments if desired.
 3. Configure Render's API service environment variables from the list above,
-using the internal Postgres connection string and different long random admin and
-recorder tokens. Never ship the admin token in the iOS app.
+using the internal Postgres connection string and different strong admin and
+recorder credentials. Never ship either admin or recorder credentials in the iOS
+app; recorder sessions are short-lived and stored in Keychain.
 4. Configure the admin static site to serve `admin/config.js` containing the
    public API URL, for example:
 
