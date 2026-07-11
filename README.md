@@ -57,6 +57,8 @@ npm run dev
 
 Open `http://127.0.0.1:5173`.
 
+For the end-to-end device workflow, see [docs/field-testing.md](docs/field-testing.md).
+
 Sign in to the admin UI, edit guidebook data, then use **Publish Offline Pack**.
 The iOS app downloads the latest published version when the user taps **Update
 Offline Area** or pulls to refresh a downloaded area.

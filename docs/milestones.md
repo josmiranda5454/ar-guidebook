@@ -82,6 +82,10 @@ Implemented in the current development milestone: bearer-token admin sessions,
 protected admin writes/review operations, and durable versioned offline-pack
 publishing backed by Postgres snapshots.
 
+The guidebook editor now supports inline create flows, area/wall/route editing,
+archive actions, route media references, visual normalized trace editing, and
+nearby-route discovery in the iOS app.
+
 Exit criteria:
 
 - Admins can publish a new offline pack version without app changes.

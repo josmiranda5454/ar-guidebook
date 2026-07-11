@@ -259,6 +259,10 @@ export async function applyCalibrationCapture(apiBaseUrl, overlayId, captureId, 
 async function parseJsonResponse(response) {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
+    if (response.status === 401) {
+      setAdminToken("");
+      throw new Error("Admin session expired. Sign in again.");
+    }
     throw new Error(detail || `Request failed with status ${response.status}`);
   }
 

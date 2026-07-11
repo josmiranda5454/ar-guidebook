@@ -712,6 +712,15 @@ mod tests {
         assert_eq!(latest.version, 2);
     }
 
+    #[tokio::test]
+    async fn archive_removes_area_from_public_reads() {
+        let store = SeedStore::new();
+        let area_id = store.areas_seed()[0].id;
+        assert!(store.archive_area(area_id).await.unwrap());
+        assert!(store.area(area_id).await.unwrap().is_none());
+        assert!(store.offline_pack(area_id).await.unwrap().is_none());
+    }
+
     #[test]
     fn seed_store_can_find_wall_route_and_search() {
         let store = SeedStore::new();
