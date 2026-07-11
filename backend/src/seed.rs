@@ -203,6 +203,7 @@ impl SeedStore {
             .cloned()
     }
 
+    #[cfg(test)]
     pub fn search_seed(&self, query: &str) -> Vec<Route> {
         let normalized_query = query.trim().to_lowercase();
         if normalized_query.is_empty() {
