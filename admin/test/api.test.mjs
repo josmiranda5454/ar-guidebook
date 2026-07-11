@@ -20,6 +20,8 @@ import {
   reviewCaptureUrl,
   updateOverlay,
   updateOverlayUrl,
+  updateMedia,
+  updateMediaUrl,
   updateRoute,
   updateRouteUrl,
 } from "../src/api.js";
@@ -84,6 +86,15 @@ test("builds guidebook editor endpoint URLs", () => {
 test("builds authentication and publish endpoint URLs", () => {
   assert.equal(loginUrl("http://localhost:8080/api/v1/"), "http://localhost:8080/api/v1/admin/auth/login");
   assert.equal(publishAreaPackUrl("http://localhost:8080/api/v1", "area-1"), "http://localhost:8080/api/v1/admin/offline-packs/areas/area-1/publish");
+  assert.equal(updateMediaUrl("http://localhost:8080/api/v1", "media-1"), "http://localhost:8080/api/v1/admin/media/media-1");
+});
+
+test("media updates use PUT with JSON", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => { calls.push({ url, options }); return Response.json({ id: "media-1" }); };
+  await updateMedia("http://localhost:8080/api/v1", { id: "media-1", kind: "topo" }, fetchImpl);
+  assert.equal(calls[0].options.method, "PUT");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { id: "media-1", kind: "topo" });
 });
 
 test("publish request includes the admin bearer token when configured", async () => {

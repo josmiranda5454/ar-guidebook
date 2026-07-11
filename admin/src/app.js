@@ -11,6 +11,7 @@ import {
   publishAreaPack,
   reviewCalibrationCapture,
   updateOverlay,
+  updateMedia,
   updateRoute,
 } from "./api.js";
 import { draftArea, draftOverlay, draftRoute, draftWall } from "./drafts.js";
@@ -237,6 +238,7 @@ function renderRouteEditor(entry) {
 
   const route = entry.route;
   const overlay = route.ar_overlays[0] ?? null;
+  const media = route.media[0] ?? null;
 
   elements.routeEditor.innerHTML = `
     <form id="route-editor-form" class="editor-form">
@@ -266,10 +268,12 @@ function renderRouteEditor(entry) {
       </section>
 
       ${overlay ? overlayEditor(overlay) : noOverlayEditor()}
+      ${media ? mediaEditor(media) : ""}
 
       <div class="actions">
         <button type="submit">Save Route</button>
         ${overlay ? '<button id="save-overlay-button" class="secondary" type="button">Save Overlay</button>' : ""}
+        ${media ? '<button id="save-media-button" class="secondary" type="button">Save Media</button>' : ""}
       </div>
     </form>
   `;
@@ -282,6 +286,18 @@ function renderRouteEditor(entry) {
   document.querySelector("#save-overlay-button")?.addEventListener("click", async () => {
     await saveOverlay(overlay);
   });
+  document.querySelector("#save-media-button")?.addEventListener("click", async () => {
+    await saveMedia(media);
+  });
+}
+
+function mediaEditor(media) {
+  return `<section class="form-section"><h3>Photo / Topo Asset</h3><div class="form-grid">
+    ${selectField("media-kind", "Kind", ["photo", "topo", "video"], media.kind)}
+    ${inputField("media-title", "Title", media.title)}
+    ${inputField("media-url", "Source URL", media.url, "url")}
+    ${inputField("media-offline-path", "Offline path", media.offline_path ?? "")}
+  </div></section>`;
 }
 
 function overlayEditor(overlay) {
@@ -458,6 +474,27 @@ async function saveOverlay(overlay) {
   } finally {
     setBusy(false);
   }
+}
+
+async function saveMedia(media) {
+  setBusy(true, "Saving media metadata...");
+  try {
+    const updated = await updateMedia(state.apiBaseUrl, {
+      ...media,
+      kind: value("media-kind"),
+      title: value("media-title"),
+      url: value("media-url"),
+      offline_path: optionalText("media-offline-path"),
+    });
+    state.routes = state.routes.map((entry) => entry.route.id === updated.route_id ? entry : entry);
+    const route = selectedRouteEntry()?.route;
+    if (route) {
+      route.media = route.media.map((item) => item.id === updated.id ? updated : item);
+    }
+    renderGuidebook();
+    setStatus("Media metadata saved.");
+  } catch (error) { setStatus(`Unable to save media: ${error.message}`); }
+  finally { setBusy(false); }
 }
 
 function readRouteForm(route) {

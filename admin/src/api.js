@@ -70,6 +70,10 @@ export function updateOverlayUrl(apiBaseUrl, overlayId) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/ar-overlays/${overlayId}`;
 }
 
+export function updateMediaUrl(apiBaseUrl, mediaId) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/media/${mediaId}`;
+}
+
 export function loginUrl(apiBaseUrl) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/auth/login`;
 }
@@ -159,6 +163,15 @@ export async function updateOverlay(apiBaseUrl, overlay, fetchImpl = fetch) {
     body: JSON.stringify(overlay),
   });
 
+  return parseJsonResponse(response);
+}
+
+export async function updateMedia(apiBaseUrl, media, fetchImpl = fetch) {
+  const response = await fetchImpl(updateMediaUrl(apiBaseUrl, media.id), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...adminAuthHeaders() },
+    body: JSON.stringify(media),
+  });
   return parseJsonResponse(response);
 }
 

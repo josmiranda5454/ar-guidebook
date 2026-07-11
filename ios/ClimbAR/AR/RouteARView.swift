@@ -170,6 +170,10 @@ private struct RouteARControlPanel: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
 
+                        Label(confidenceMessage, systemImage: confidenceIcon)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(confidenceColor)
+
                         RouteAlignmentControls(alignment: $alignment)
 
                         calibrationActions
@@ -201,6 +205,22 @@ private struct RouteARControlPanel: View {
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+    }
+
+    private var confidenceMessage: String {
+        switch overlay.confidence {
+        case .draft: "Draft overlay: confirm the trace visually before climbing."
+        case .fieldTested: "Field-tested alignment: check the wall and route start."
+        case .reviewed: "Reviewed overlay: use the trace as a visual guide, not a safety guarantee."
+        }
+    }
+
+    private var confidenceIcon: String {
+        overlay.confidence == .reviewed ? "checkmark.seal" : "exclamationmark.triangle"
+    }
+
+    private var confidenceColor: Color {
+        overlay.confidence == .reviewed ? .green : .orange
     }
 
     private var calibrationActions: some View {
