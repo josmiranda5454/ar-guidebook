@@ -49,6 +49,7 @@ struct RouteARView: View {
                 uploadMessage: uploadMessage,
                 latestCaptureJSON: latestCaptureJSON,
                 hasLatestCapture: latestCapture != nil,
+                hasRecorderToken: AppConfiguration.recorderToken != nil,
                 isUploading: isUploading,
                 saveCalibrationCapture: saveCalibrationCapture,
                 uploadLatestCapture: uploadLatestCapture
@@ -133,6 +134,7 @@ private struct RouteARControlPanel: View {
     let uploadMessage: String?
     let latestCaptureJSON: String?
     let hasLatestCapture: Bool
+    let hasRecorderToken: Bool
     let isUploading: Bool
     let saveCalibrationCapture: () -> Void
     let uploadLatestCapture: () async -> Void
@@ -251,7 +253,7 @@ private struct RouteARControlPanel: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .disabled(isUploading)
+                .disabled(isUploading || !hasRecorderToken)
             }
         }
         .font(.caption.weight(.semibold))
@@ -262,6 +264,9 @@ private struct RouteARControlPanel: View {
     private var statusText: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(captureStatus)
+            if !hasRecorderToken {
+                Text("Uploads are disabled until a recorder token is configured for this build.")
+            }
             if let uploadMessage {
                 Text(uploadMessage)
             }
