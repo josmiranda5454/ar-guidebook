@@ -46,6 +46,7 @@ struct RouteARView: View {
                 routeName: route.name,
                 overlay: overlay,
                 alignmentHint: alignmentHint,
+                alignmentStatus: alignmentStatus,
                 alignment: $alignment,
                 isExpanded: $isControlPanelExpanded,
                 captureStatus: captureStatus,
@@ -99,6 +100,10 @@ struct RouteARView: View {
         }
     }
 
+    private var alignmentStatus: String {
+        captureCount == 0 ? "Align the yellow trace with the route." : "Latest alignment saved on this device."
+    }
+
     private func saveCalibrationCapture() {
         let capture = RouteCalibrationCapture(
             routeId: route.id,
@@ -139,6 +144,7 @@ private struct RouteARControlPanel: View {
     let routeName: String
     let overlay: RouteAROverlay
     let alignmentHint: String
+    let alignmentStatus: String
     @Binding var alignment: RouteARAlignment
     @Binding var isExpanded: Bool
     let captureStatus: String
@@ -166,19 +172,26 @@ private struct RouteARControlPanel: View {
 
                 Spacer()
 
-                Button(isExpanded ? "Hide" : "Tune") {
+                Button {
                     withAnimation(.snappy) {
                         isExpanded.toggle()
                     }
+                } label: {
+                    Label(isExpanded ? "Done" : "Tune", systemImage: isExpanded ? "checkmark" : "slider.horizontal.3")
                 }
                 .font(.caption.weight(.semibold))
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(isExpanded ? "Finish tuning" : "Tune route trace")
             }
 
             if isExpanded {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
+                        Label(alignmentStatus, systemImage: "scope")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(ClimbARStyle.tint)
+
                         Text(alignmentHint)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -198,21 +211,27 @@ private struct RouteARControlPanel: View {
                 .scrollIndicators(.hidden)
                 .frame(maxHeight: 280)
             } else {
-                HStack(spacing: 10) {
-                    Text(alignment.summary)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(alignmentStatus, systemImage: "scope")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ClimbARStyle.tint)
 
-                    Spacer()
+                    HStack {
+                        Text(alignment.summary)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
 
-                    Button {
-                        saveCalibrationCapture()
-                    } label: {
-                        Label("Save", systemImage: "square.and.arrow.down")
+                        Spacer()
+
+                        Button {
+                            saveCalibrationCapture()
+                        } label: {
+                            Label("Save snapshot", systemImage: "square.and.arrow.down")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
             }
         }
@@ -238,41 +257,49 @@ private struct RouteARControlPanel: View {
     }
 
     private var calibrationActions: some View {
-        HStack(spacing: 8) {
+        VStack(spacing: 8) {
             Button {
                 saveCalibrationCapture()
             } label: {
-                Label("Save", systemImage: "square.and.arrow.down")
+                Label("Save calibration snapshot", systemImage: "square.and.arrow.down")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
 
-            if let latestCaptureJSON {
-                ShareLink(item: latestCaptureJSON) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
-
-            if hasLatestCapture {
-                Button {
-                    Task {
-                        await uploadLatestCapture()
+            HStack(spacing: 8) {
+                if let latestCaptureJSON {
+                    ShareLink(item: latestCaptureJSON) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Label("Upload", systemImage: "icloud.and.arrow.up")
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
-                .disabled(isUploading || !hasRecorderSession)
-                .overlay {
-                    if !hasRecorderSession {
-                        Button("Sign in to upload") {
-                            presentRecorderLogin()
+
+                if hasLatestCapture {
+                    if hasRecorderSession {
+                        Button {
+                            Task {
+                                await uploadLatestCapture()
+                            }
+                        } label: {
+                            if isUploading {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                            } else {
+                                Label("Upload", systemImage: "icloud.and.arrow.up")
+                                    .frame(maxWidth: .infinity)
+                            }
                         }
                         .buttonStyle(.bordered)
-                        .background(.regularMaterial, in: Capsule())
+                        .disabled(isUploading)
+                    } else {
+                        Button {
+                            presentRecorderLogin()
+                        } label: {
+                            Label("Recorder sign-in", systemImage: "person.badge.key")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
             }
@@ -286,11 +313,13 @@ private struct RouteARControlPanel: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(captureStatus)
             if !hasRecorderSession {
-                Text("Sign in as a field recorder to upload this snapshot.")
+                Text("Sign in as a field recorder to upload snapshots for review.")
             }
             if let uploadMessage {
                 Text(uploadMessage)
             }
+
+            Text("Confirm the route start, holds, and protection against the wall before climbing.")
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
@@ -386,6 +415,8 @@ private struct RouteAlignmentControls: View {
             }
         }
         .padding(.top, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Route trace alignment controls")
     }
 
     private var nudgePad: some View {
@@ -417,6 +448,17 @@ private struct RouteAlignmentControls: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .accessibilityLabel(nudgeLabel(for: systemName))
+    }
+
+    private func nudgeLabel(for systemName: String) -> String {
+        switch systemName {
+        case "arrow.up": "Move trace up"
+        case "arrow.down": "Move trace down"
+        case "arrow.left": "Move trace left"
+        case "arrow.right": "Move trace right"
+        default: "Move trace"
+        }
     }
 
     private func sliderRow(
