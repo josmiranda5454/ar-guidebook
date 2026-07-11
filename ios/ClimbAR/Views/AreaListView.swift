@@ -41,25 +41,65 @@ struct AreaListView: View {
 
     var body: some View {
         NavigationStack {
-            List(viewModel.areas) { area in
-                NavigationLink {
-                    AreaDetailView(area: area, api: viewModel.api, packStore: viewModel.packStore)
-                } label: {
-                    HStack {
-                        Text(area.name)
-                        Spacer()
-                        if viewModel.downloadedAreaIds.contains(area.id) {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .foregroundStyle(.green)
-                                .accessibilityLabel("Downloaded")
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Find your next line")
+                            .font(.title2.weight(.bold))
+                        Text("Explore climbing areas, download them for the wall, and use AR when you arrive.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 12, trailing: 20))
+                }
+
+                Section("Climbing areas") {
+                    ForEach(viewModel.areas) { area in
+                        NavigationLink {
+                            AreaDetailView(area: area, api: viewModel.api, packStore: viewModel.packStore)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "mountain.2.fill")
+                                    .foregroundStyle(ClimbARStyle.tint)
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(area.name)
+                                        .font(.body.weight(.semibold))
+                                    Text("\(area.walls.count) wall\(area.walls.count == 1 ? "" : "s")")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+                                if viewModel.downloadedAreaIds.contains(area.id) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                        .accessibilityLabel("Downloaded for offline use")
+                                }
+                            }
+                            .padding(.vertical, 5)
                         }
                     }
                 }
+
+                if viewModel.areas.isEmpty, viewModel.errorMessage == nil {
+                    EmptyStateCard(
+                        title: "No areas yet",
+                        message: "Pull down to refresh and look for climbing areas.",
+                        systemImage: "map"
+                    )
+                    .listRowBackground(Color.clear)
+                }
             }
-            .navigationTitle("Climbing Areas")
+            .listStyle(.insetGrouped)
+            .navigationTitle("Explore")
             .overlay {
                 if let errorMessage = viewModel.errorMessage {
-                    ContentUnavailableView("Offline or Unavailable", systemImage: "wifi.slash", description: Text(errorMessage))
+                    EmptyStateCard(title: "Offline or unavailable", message: errorMessage, systemImage: "wifi.slash")
+                        .padding(.horizontal)
                 }
             }
             .refreshable {

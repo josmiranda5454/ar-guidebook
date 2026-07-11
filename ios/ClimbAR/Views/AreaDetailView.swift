@@ -76,6 +76,15 @@ struct AreaDetailView: View {
     var body: some View {
         List {
             Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Plan your day outside")
+                        .font(.headline)
+                    Text("Download this area before you leave service. Routes and walls will stay available offline.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+
                 Button {
                     Task { await viewModel.downloadArea() }
                 } label: {
@@ -95,9 +104,9 @@ struct AreaDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let downloadedVersion = viewModel.downloadedVersion {
-                    Text("Offline pack v\(downloadedVersion)")
+                    Label("Offline pack v\(downloadedVersion)", systemImage: "checkmark.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.green)
                 }
             }
 
@@ -108,14 +117,24 @@ struct AreaDetailView: View {
                 }
             }
 
-            Section("Walls") {
+            Section("Walls · \(viewModel.area.walls.count)") {
                 ForEach(viewModel.area.walls) { wall in
-                    NavigationLink(wall.name) {
+                    NavigationLink {
                         WallDetailView(wall: wall)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(wall.name)
+                                .font(.body.weight(.semibold))
+                            Text("\(wall.routes.count) route\(wall.routes.count == 1 ? "" : "s")")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .tint(ClimbARStyle.tint)
         .navigationTitle(viewModel.area.name)
         .refreshable {
             await viewModel.refresh()

@@ -107,8 +107,12 @@ struct RouteSearchView: View {
     var body: some View {
         NavigationStack {
             List {
-                if viewModel.isSearching {
-                    ProgressView("Searching...")
+                if viewModel.isSearching || viewModel.isLoadingNearby {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text(viewModel.isSearching ? "Searching routes..." : "Finding routes near you...")
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if let statusMessage = viewModel.statusMessage {
@@ -120,14 +124,20 @@ struct RouteSearchView: View {
                     NavigationLink {
                         RouteDetailView(route: route)
                     } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(route.name)
-                                .font(.headline)
-                            Text("\(route.grade) • \(route.routeTypes.map(\.rawValue).joined(separator: ", "))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        RouteRow(route: route)
                     }
+                }
+
+                if viewModel.routes.isEmpty,
+                   !viewModel.isSearching,
+                   viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   viewModel.nearbyRoutes.isEmpty {
+                    EmptyStateCard(
+                        title: "Search the guidebook",
+                        message: "Look up a route by name, grade, or notes. Downloaded areas work offline too.",
+                        systemImage: "magnifyingglass"
+                    )
+                    .listRowBackground(Color.clear)
                 }
 
                 if !viewModel.nearbyRoutes.isEmpty {
@@ -135,26 +145,32 @@ struct RouteSearchView: View {
                         ForEach(viewModel.nearbyRoutes) { nearby in
                             NavigationLink {
                                 RouteDetailView(route: nearby.route)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(nearby.route.name).font(.headline)
-                                    Text("\(nearby.route.grade) • \(formattedDistance(nearby.distanceMeters))")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
+                        } label: {
+                            HStack {
+                                RouteRow(route: nearby.route)
+                                Spacer(minLength: 4)
+                                Text(formattedDistance(nearby.distanceMeters))
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
                             }
+                        }
                         }
                     }
                 }
             }
-            .navigationTitle("Search")
+            .listStyle(.insetGrouped)
+            .navigationTitle("Find a route")
             .searchable(text: $viewModel.query, prompt: "Route name, grade, or notes")
             .onSubmit(of: .search) {
                 Task { await viewModel.search() }
             }
             .toolbar {
-                Button("Search") {
+                Button {
                     Task { await viewModel.search() }
+                } label: {
+                    Image(systemName: "magnifyingglass")
                 }
+                .accessibilityLabel("Search routes")
                 .disabled(viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Button {
@@ -165,6 +181,7 @@ struct RouteSearchView: View {
                 }
                 .disabled(viewModel.isLoadingNearby)
             }
+            .tint(ClimbARStyle.tint)
             .refreshable {
                 await viewModel.refresh()
             }

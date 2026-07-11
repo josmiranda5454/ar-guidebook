@@ -11,6 +11,34 @@ struct RouteDetailView: View {
 
     var body: some View {
         List {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Image(systemName: "figure.climbing")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(ClimbARStyle.tint)
+                            .frame(width: 44, height: 44)
+                            .background(ClimbARStyle.tint.opacity(0.12), in: Circle())
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(route.grade)
+                                .font(.title3.weight(.bold))
+                            Text(route.routeTypes.map(\.rawValue).joined(separator: " · "))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    if let stars = route.starsAverage {
+                        Label(String(format: "%.1f community rating", stars), systemImage: "star.fill")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
             Section("Overview") {
                 LabeledContent("Grade", value: route.grade)
                 if let lengthFeet = route.lengthFeet {
@@ -44,20 +72,27 @@ struct RouteDetailView: View {
             if !route.arOverlays.isEmpty {
                 Section("Find It Outside") {
                     if proximityState.canFindOutside {
-                        NavigationLink("Open AR route overlay") {
+                        NavigationLink {
                             RouteARView(route: route, overlay: route.arOverlays[0])
+                        } label: {
+                            Label("Open AR route overlay", systemImage: "arkit")
+                                .font(.body.weight(.semibold))
                         }
+                        .buttonStyle(.borderedProminent)
                     } else {
-                        Button("Open AR route overlay") {}
-                            .disabled(true)
+                        Label("AR unlocks when you reach the wall", systemImage: "location.circle")
+                            .font(.body.weight(.semibold))
+                        Text(proximityMessage)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
 
-                    Text(proximityMessage)
-                        .foregroundStyle(.secondary)
-
-                    Button("Refresh Location") {
+                    Button {
                         locationService.requestLocation()
+                    } label: {
+                        Label("Refresh location", systemImage: "location.fill")
                     }
+                    .font(.subheadline.weight(.medium))
 
                     #if DEBUG
                     Button("Simulate At Route") {
@@ -72,6 +107,8 @@ struct RouteDetailView: View {
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .tint(ClimbARStyle.tint)
         .navigationTitle(route.name)
         .task {
             locationService.requestLocation()

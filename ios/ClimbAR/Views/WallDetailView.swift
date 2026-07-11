@@ -9,25 +9,22 @@ struct WallDetailView: View {
                 Text(wall.description)
                 if let approachNotes = wall.approachNotes {
                     Text(approachNotes)
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Routes") {
+            Section("Routes · \(wall.routes.count)") {
                 ForEach(wall.routes) { route in
                     NavigationLink {
                         RouteDetailView(route: route)
                     } label: {
-                        VStack(alignment: .leading) {
-                            Text(route.name)
-                            Text("\(route.grade) • \(route.routeTypes.map(\.rawValue).joined(separator: ", "))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        RouteRow(route: route)
                     }
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .tint(ClimbARStyle.tint)
         .navigationTitle(wall.name)
     }
 }
-
