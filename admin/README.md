@@ -28,6 +28,9 @@ Hosted static deployments can set the API URL in `config.js`:
 globalThis.CLIMBAR_API_BASE_URL = "https://api.example.com/api/v1";
 ```
 
+The admin UI uses the admin token returned by its sign-in flow. The iOS app must
+use the separate recorder token only for uploading calibration captures.
+
 ## Current Capabilities
 
 - Browse area, wall, and route hierarchy.

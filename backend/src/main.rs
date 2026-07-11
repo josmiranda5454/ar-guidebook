@@ -4,7 +4,7 @@ mod models;
 mod repository;
 mod seed;
 
-use axum::http::HeaderMap;
+use axum::http::{header, HeaderMap, HeaderValue, Method};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -29,6 +29,7 @@ use uuid::Uuid;
 struct AppState {
     repository: Arc<dyn GuideRepository>,
     admin_token: String,
+    recorder_token: String,
 }
 
 #[tokio::main]
@@ -48,10 +49,12 @@ async fn main() {
         return;
     }
 
+    auth::validate_production_configuration();
     let (_, _, admin_token) = auth::configured_admin_credentials();
     let state = AppState {
         repository: configure_repository().await,
         admin_token,
+        recorder_token: auth::configured_recorder_token(),
     };
 
     let app = Router::new()
@@ -104,7 +107,7 @@ async fn main() {
             "/api/v1/admin/archived/:entity_id/restore",
             post(restore_entity),
         )
-        .layer(CorsLayer::permissive())
+        .layer(configured_cors())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -654,13 +657,56 @@ async fn create_calibration_capture(
     headers: HeaderMap,
     Json(capture): Json<RouteCalibrationCapture>,
 ) -> Result<(StatusCode, Json<RouteCalibrationCapture>), StatusCode> {
-    auth::authorize(&headers, &state)?;
+    auth::authorize_recorder(&headers, &state)?;
+    validate_calibration_capture(&capture)?;
     state
         .repository
         .create_calibration_capture(capture)
         .await
         .map(|capture| (StatusCode::CREATED, Json(capture)))
         .map_err(status_from_repository_error)
+}
+
+fn validate_calibration_capture(capture: &RouteCalibrationCapture) -> Result<(), StatusCode> {
+    if capture.route_name.trim().is_empty() || capture.route_name.len() > 200 {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    let alignment = &capture.alignment;
+    let values = [
+        alignment.horizontal_offset_meters,
+        alignment.vertical_offset_meters,
+        alignment.depth_offset_meters,
+        alignment.scale,
+    ];
+    if values.iter().any(|value| !value.is_finite())
+        || alignment.horizontal_offset_meters.abs() > 100.0
+        || alignment.vertical_offset_meters.abs() > 100.0
+        || alignment.depth_offset_meters.abs() > 100.0
+        || !(0.1..=10.0).contains(&alignment.scale)
+        || capture.overlay_version == 0
+    {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    Ok(())
+}
+
+fn configured_cors() -> CorsLayer {
+    let configured_origins = std::env::var("CLIMBAR_ALLOWED_ORIGINS").unwrap_or_default();
+    let origins = configured_origins
+        .split(',')
+        .filter_map(|origin| origin.trim().parse::<HeaderValue>().ok())
+        .collect::<Vec<_>>();
+
+    if origins.is_empty() {
+        return CorsLayer::permissive();
+    }
+
+    CorsLayer::new()
+        .allow_origin(origins)
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
 #[derive(Deserialize)]
@@ -718,7 +764,45 @@ fn server_addr(host: Option<String>, port: Option<String>) -> SocketAddr {
 
 #[cfg(test)]
 mod tests {
-    use super::{health_payload, server_addr};
+    use super::{health_payload, server_addr, validate_calibration_capture};
+    use crate::models::{
+        ArAnchorStrategy, CalibrationReviewStatus, RouteArAlignment, RouteCalibrationCapture,
+    };
+    use axum::http::StatusCode;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    fn valid_capture() -> RouteCalibrationCapture {
+        RouteCalibrationCapture {
+            id: Uuid::new_v4(),
+            route_id: Uuid::new_v4(),
+            route_name: "Sample Arete".into(),
+            overlay_id: Uuid::new_v4(),
+            overlay_version: 1,
+            anchor_strategy: ArAnchorStrategy::ManualAlignment,
+            alignment: RouteArAlignment {
+                horizontal_offset_meters: 0.0,
+                vertical_offset_meters: 0.0,
+                depth_offset_meters: 0.0,
+                scale: 1.0,
+            },
+            captured_at: Utc::now(),
+            review_status: CalibrationReviewStatus::Pending,
+            reviewer_notes: None,
+            reviewed_at: None,
+        }
+    }
+
+    #[test]
+    fn calibration_capture_validation_rejects_unbounded_alignment() {
+        let mut capture = valid_capture();
+        capture.alignment.scale = 0.01;
+
+        assert_eq!(
+            validate_calibration_capture(&capture),
+            Err(StatusCode::UNPROCESSABLE_ENTITY)
+        );
+    }
 
     #[test]
     fn health_payload_identifies_the_running_service() {

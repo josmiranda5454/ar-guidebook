@@ -20,8 +20,8 @@
 	<string>1</string>
 	<key>CLIMBAR_API_BASE_URL</key>
 	<string>$(CLIMBAR_API_BASE_URL)</string>
-	<key>CLIMBAR_ADMIN_TOKEN</key>
-	<string>$(CLIMBAR_ADMIN_TOKEN)</string>
+	<key>CLIMBAR_RECORDER_TOKEN</key>
+	<string>$(CLIMBAR_RECORDER_TOKEN)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
