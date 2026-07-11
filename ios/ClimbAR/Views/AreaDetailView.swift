@@ -6,6 +6,7 @@ final class AreaDetailViewModel: ObservableObject {
     @Published var isDownloaded = false
     @Published var downloadedVersion: UInt32?
     @Published var isDownloading = false
+    @Published var isRemoving = false
     @Published var statusMessage: String?
 
     private let api: ClimbARAPI
@@ -19,6 +20,10 @@ final class AreaDetailViewModel: ObservableObject {
 
     func loadCachedPack() async {
         isDownloaded = await packStore.isDownloaded(areaId: area.id)
+        if let pack = try? await packStore.load(areaId: area.id) {
+            downloadedVersion = pack.version
+        }
+
         do {
             area = try await api.area(id: area.id)
             return
@@ -49,6 +54,21 @@ final class AreaDetailViewModel: ObservableObject {
         }
     }
 
+    func deleteArea() async {
+        isRemoving = true
+        statusMessage = nil
+        defer { isRemoving = false }
+
+        do {
+            try await packStore.delete(areaId: area.id)
+            isDownloaded = false
+            downloadedVersion = nil
+            statusMessage = "Removed from offline storage."
+        } catch {
+            statusMessage = "Could not remove this offline area."
+        }
+    }
+
     func refresh() async {
         if isDownloaded {
             await downloadArea()
@@ -66,6 +86,7 @@ final class AreaDetailViewModel: ObservableObject {
 
 struct AreaDetailView: View {
     @StateObject private var viewModel: AreaDetailViewModel
+    @State private var isDeleteConfirmationPresented = false
 
     init(area: Area, api: ClimbARAPI, packStore: OfflinePackStore) {
         _viewModel = StateObject(
@@ -93,10 +114,19 @@ struct AreaDetailView: View {
                         systemImage: viewModel.isDownloaded ? "arrow.clockwise.circle" : "arrow.down.circle"
                     )
                 }
-                .disabled(viewModel.isDownloading)
+                .disabled(viewModel.isDownloading || viewModel.isRemoving)
 
-                if viewModel.isDownloading {
-                    ProgressView("Downloading...")
+                if viewModel.isDownloaded {
+                    Button(role: .destructive) {
+                        isDeleteConfirmationPresented = true
+                    } label: {
+                        Label("Remove Offline Area", systemImage: "trash")
+                    }
+                    .disabled(viewModel.isDownloading || viewModel.isRemoving)
+                }
+
+                if viewModel.isDownloading || viewModel.isRemoving {
+                    ProgressView(viewModel.isRemoving ? "Removing..." : "Downloading...")
                 }
 
                 if let statusMessage = viewModel.statusMessage {
@@ -136,6 +166,18 @@ struct AreaDetailView: View {
         .listStyle(.insetGrouped)
         .tint(ClimbARStyle.tint)
         .navigationTitle(viewModel.area.name)
+        .confirmationDialog(
+            "Remove offline area?",
+            isPresented: $isDeleteConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Offline Area", role: .destructive) {
+                Task { await viewModel.deleteArea() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the downloaded walls and routes from this device. You can download the area again later.")
+        }
         .refreshable {
             await viewModel.refresh()
         }

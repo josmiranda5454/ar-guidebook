@@ -41,6 +41,15 @@ actor OfflinePackStore {
         fileManager.fileExists(atPath: packURL(areaId: areaId).path)
     }
 
+    func delete(areaId: UUID) throws {
+        let url = packURL(areaId: areaId)
+        guard fileManager.fileExists(atPath: url.path) else {
+            return
+        }
+
+        try fileManager.removeItem(at: url)
+    }
+
     private var packsDirectory: URL {
         fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appending(path: "OfflinePacks", directoryHint: .isDirectory)
