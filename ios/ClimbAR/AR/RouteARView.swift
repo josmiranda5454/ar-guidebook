@@ -39,12 +39,20 @@ struct RouteARView: View {
             initialValue: latestCapture.flatMap(RouteCalibrationCaptureStore.jsonString(for:))
         )
         _hasRecorderSession = State(initialValue: AppConfiguration.recorderSessionToken != nil)
-        _routeStartWorldPosition = State(initialValue: nil)
+        let savedRouteStart = RouteARPlacementStore.load(routeId: route.id, overlayId: overlay.id)
+        _routeStartWorldPosition = State(initialValue: savedRouteStart)
+        _anchorMessage = State(
+            initialValue: savedRouteStart == nil
+                ? nil
+                : "Saved wall anchor loaded; move slowly to relocalize."
+        )
     }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             RouteARSceneView(
+                routeId: route.id,
+                overlayId: overlay.id,
                 routeName: route.name,
                 overlay: overlay,
                 alignment: alignment,
@@ -136,8 +144,9 @@ struct RouteARView: View {
 
     private func placeRouteStart(at worldPosition: SIMD3<Float>) {
         routeStartWorldPosition = worldPosition
+        RouteARPlacementStore.save(worldPosition, routeId: route.id, overlayId: overlay.id)
         isPlacingRouteStart = false
-        anchorMessage = "Route start anchored to the wall."
+        anchorMessage = "Route start anchored and saved for the next session."
     }
 
     private func saveCalibrationCapture() {
@@ -548,6 +557,8 @@ private struct RouteAlignmentControls: View {
 }
 
 private struct RouteARSceneView: UIViewRepresentable {
+    let routeId: UUID
+    let overlayId: UUID
     let routeName: String
     let overlay: RouteAROverlay
     let alignment: RouteARAlignment
@@ -556,7 +567,11 @@ private struct RouteARSceneView: UIViewRepresentable {
     let onRouteStartPlaced: (SIMD3<Float>) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onRouteStartPlaced: onRouteStartPlaced)
+        Coordinator(
+            routeId: routeId,
+            overlayId: overlayId,
+            onRouteStartPlaced: onRouteStartPlaced
+        )
     }
 
     func makeUIView(context: Context) -> ARView {
@@ -568,6 +583,10 @@ private struct RouteARSceneView: UIViewRepresentable {
             let configuration = ARWorldTrackingConfiguration()
             configuration.planeDetection = [.vertical]
             configuration.environmentTexturing = .automatic
+            configuration.initialWorldMap = RouteARWorldMapStore.load(
+                routeId: routeId,
+                overlayId: overlayId
+            )
             arView.session.run(configuration)
         }
 
@@ -659,10 +678,18 @@ private struct RouteARSceneView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject {
+        let routeId: UUID
+        let overlayId: UUID
         var isPlacingRouteStart = false
         var onRouteStartPlaced: (SIMD3<Float>) -> Void
 
-        init(onRouteStartPlaced: @escaping (SIMD3<Float>) -> Void) {
+        init(
+            routeId: UUID,
+            overlayId: UUID,
+            onRouteStartPlaced: @escaping (SIMD3<Float>) -> Void
+        ) {
+            self.routeId = routeId
+            self.overlayId = overlayId
             self.onRouteStartPlaced = onRouteStartPlaced
         }
 
@@ -687,6 +714,17 @@ private struct RouteARSceneView: UIViewRepresentable {
                 transform.columns.3.y,
                 transform.columns.3.z
             )
+            arView.session.getCurrentWorldMap { worldMap, _ in
+                guard let worldMap else {
+                    return
+                }
+
+                RouteARWorldMapStore.save(
+                    worldMap,
+                    routeId: self.routeId,
+                    overlayId: self.overlayId
+                )
+            }
             onRouteStartPlaced(worldPosition)
         }
     }
@@ -785,6 +823,81 @@ private enum RouteARAlignmentStore {
 
     private static func key(routeId: UUID, overlayId: UUID) -> String {
         "route-ar-alignment-\(routeId.uuidString)-\(overlayId.uuidString)"
+    }
+}
+
+private struct StoredRouteStartPosition: Codable {
+    let x: Float
+    let y: Float
+    let z: Float
+
+    init(_ position: SIMD3<Float>) {
+        x = position.x
+        y = position.y
+        z = position.z
+    }
+
+    var simdPosition: SIMD3<Float> {
+        SIMD3<Float>(x, y, z)
+    }
+}
+
+private enum RouteARPlacementStore {
+    static func load(routeId: UUID, overlayId: UUID) -> SIMD3<Float>? {
+        guard let data = UserDefaults.standard.data(forKey: key(routeId: routeId, overlayId: overlayId)),
+              let position = try? JSONDecoder().decode(StoredRouteStartPosition.self, from: data) else {
+            return nil
+        }
+
+        return position.simdPosition
+    }
+
+    static func save(_ position: SIMD3<Float>, routeId: UUID, overlayId: UUID) {
+        guard let data = try? JSONEncoder().encode(StoredRouteStartPosition(position)) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(routeId: routeId, overlayId: overlayId))
+    }
+
+    private static func key(routeId: UUID, overlayId: UUID) -> String {
+        "route-ar-start-position-\(routeId.uuidString)-\(overlayId.uuidString)"
+    }
+}
+
+private enum RouteARWorldMapStore {
+    static func load(routeId: UUID, overlayId: UUID) -> ARWorldMap? {
+        let url = worldMapURL(routeId: routeId, overlayId: overlayId)
+        guard let data = try? Data(contentsOf: url) else {
+            return nil
+        }
+
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: ARWorldMap.self, from: data)
+    }
+
+    static func save(_ worldMap: ARWorldMap, routeId: UUID, overlayId: UUID) {
+        guard let data = try? NSKeyedArchiver.archivedData(
+            withRootObject: worldMap,
+            requiringSecureCoding: true
+        ) else {
+            return
+        }
+
+        let directory = worldMapsDirectory
+        try? FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: worldMapURL(routeId: routeId, overlayId: overlayId), options: .atomic)
+    }
+
+    private static var worldMapsDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "ARWorldMaps", directoryHint: .isDirectory)
+    }
+
+    private static func worldMapURL(routeId: UUID, overlayId: UUID) -> URL {
+        worldMapsDirectory.appending(path: "\(routeId.uuidString)-\(overlayId.uuidString).worldmap")
     }
 }
 
