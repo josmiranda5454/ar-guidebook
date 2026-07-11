@@ -3,6 +3,42 @@ import RealityKit
 import SwiftUI
 import UIKit
 
+private enum RouteARTrackingStatus: Equatable {
+    case initializing
+    case relocalizing
+    case ready
+    case limited(String)
+    case unavailable
+
+    var message: String {
+        switch self {
+        case .initializing: "Starting AR tracking..."
+        case .relocalizing: "Restoring the saved wall reference..."
+        case .ready: "Wall tracking ready"
+        case .limited(let reason): "Move slowly: \(reason)"
+        case .unavailable: "AR tracking is unavailable"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .initializing, .relocalizing: "location.viewfinder"
+        case .ready: "checkmark.circle.fill"
+        case .limited: "exclamationmark.triangle"
+        case .unavailable: "xmark.circle"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .initializing, .relocalizing: .orange
+        case .ready: .green
+        case .limited: .orange
+        case .unavailable: .red
+        }
+    }
+}
+
 struct RouteARView: View {
     let route: Route
     let overlay: RouteAROverlay
@@ -20,6 +56,7 @@ struct RouteARView: View {
     @State private var routeStartWorldPosition: SIMD3<Float>?
     @State private var isPlacingRouteStart = false
     @State private var anchorMessage: String?
+    @State private var trackingStatus: RouteARTrackingStatus = .initializing
 
     init(route: Route, overlay: RouteAROverlay) {
         self.route = route
@@ -46,6 +83,11 @@ struct RouteARView: View {
                 ? nil
                 : "Saved wall anchor loaded; move slowly to relocalize."
         )
+        _trackingStatus = State(
+            initialValue: RouteARWorldMapStore.load(routeId: route.id, overlayId: overlay.id) == nil
+                ? .initializing
+                : .relocalizing
+        )
     }
 
     var body: some View {
@@ -58,7 +100,22 @@ struct RouteARView: View {
                 alignment: alignment,
                 routeStartWorldPosition: routeStartWorldPosition,
                 isPlacingRouteStart: isPlacingRouteStart,
-                onRouteStartPlaced: placeRouteStart
+                onRouteStartPlaced: placeRouteStart,
+                onPlacementRejected: { message in anchorMessage = message },
+                onTrackingStatusChanged: { trackingStatus = $0 },
+                onWorldMapSaved: { didSave in
+                    if didSave, let routeStartWorldPosition {
+                        RouteARPlacementStore.save(
+                            routeStartWorldPosition,
+                            routeId: route.id,
+                            overlayId: overlay.id
+                        )
+                        anchorMessage = "Route start and wall reference saved for the next session."
+                    } else {
+                        RouteARPlacementStore.delete(routeId: route.id, overlayId: overlay.id)
+                        anchorMessage = "Route start saved for this session. Scan more of the wall to save its reference."
+                    }
+                }
             )
                 .ignoresSafeArea()
 
@@ -68,6 +125,7 @@ struct RouteARView: View {
                 alignmentHint: alignmentHint,
                 alignmentStatus: alignmentStatus,
                 anchorStatus: anchorStatus,
+                trackingStatus: trackingStatus,
                 alignment: $alignment,
                 isExpanded: $isControlPanelExpanded,
                 captureStatus: captureStatus,
@@ -77,10 +135,12 @@ struct RouteARView: View {
                 hasRecorderSession: hasRecorderSession,
                 isUploading: isUploading,
                 isPlacingRouteStart: isPlacingRouteStart,
+                hasSavedPlacement: routeStartWorldPosition != nil,
                 saveCalibrationCapture: saveCalibrationCapture,
                 uploadLatestCapture: uploadLatestCapture,
                 presentRecorderLogin: { isRecorderLoginPresented = true },
-                beginRouteStartPlacement: beginRouteStartPlacement
+                beginRouteStartPlacement: beginRouteStartPlacement,
+                clearRouteStartPlacement: clearRouteStartPlacement
             )
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
@@ -144,9 +204,16 @@ struct RouteARView: View {
 
     private func placeRouteStart(at worldPosition: SIMD3<Float>) {
         routeStartWorldPosition = worldPosition
-        RouteARPlacementStore.save(worldPosition, routeId: route.id, overlayId: overlay.id)
         isPlacingRouteStart = false
-        anchorMessage = "Route start anchored and saved for the next session."
+        anchorMessage = "Route start anchored for this session. Saving the wall reference..."
+    }
+
+    private func clearRouteStartPlacement() {
+        routeStartWorldPosition = nil
+        isPlacingRouteStart = false
+        anchorMessage = "Saved wall reference removed."
+        RouteARPlacementStore.delete(routeId: route.id, overlayId: overlay.id)
+        RouteARWorldMapStore.delete(routeId: route.id, overlayId: overlay.id)
     }
 
     private func saveCalibrationCapture() {
@@ -191,6 +258,7 @@ private struct RouteARControlPanel: View {
     let alignmentHint: String
     let alignmentStatus: String
     let anchorStatus: String
+    let trackingStatus: RouteARTrackingStatus
     @Binding var alignment: RouteARAlignment
     @Binding var isExpanded: Bool
     let captureStatus: String
@@ -200,10 +268,12 @@ private struct RouteARControlPanel: View {
     let hasRecorderSession: Bool
     let isUploading: Bool
     let isPlacingRouteStart: Bool
+    let hasSavedPlacement: Bool
     let saveCalibrationCapture: () -> Void
     let uploadLatestCapture: () async -> Void
     let presentRecorderLogin: () -> Void
     let beginRouteStartPlacement: () -> Void
+    let clearRouteStartPlacement: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -216,6 +286,10 @@ private struct RouteARControlPanel: View {
                     Text("Overlay v\(overlay.version) • \(overlay.confidence.rawValue)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+
+                    Label(trackingStatus.message, systemImage: trackingStatus.systemImage)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(trackingStatus.color)
                 }
 
                 Spacer()
@@ -398,6 +472,13 @@ private struct RouteARControlPanel: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+
+            if hasSavedPlacement {
+                Button("Forget saved wall reference", role: .destructive) {
+                    clearRouteStartPlacement()
+                }
+                .font(.caption)
+            }
         }
     }
 }
@@ -565,12 +646,18 @@ private struct RouteARSceneView: UIViewRepresentable {
     let routeStartWorldPosition: SIMD3<Float>?
     let isPlacingRouteStart: Bool
     let onRouteStartPlaced: (SIMD3<Float>) -> Void
+    let onPlacementRejected: (String) -> Void
+    let onTrackingStatusChanged: (RouteARTrackingStatus) -> Void
+    let onWorldMapSaved: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             routeId: routeId,
             overlayId: overlayId,
-            onRouteStartPlaced: onRouteStartPlaced
+            onRouteStartPlaced: onRouteStartPlaced,
+            onPlacementRejected: onPlacementRejected,
+            onTrackingStatusChanged: onTrackingStatusChanged,
+            onWorldMapSaved: onWorldMapSaved
         )
     }
 
@@ -578,6 +665,7 @@ private struct RouteARSceneView: UIViewRepresentable {
         let arView = ARView(frame: .zero)
         arView.environment.sceneUnderstanding.options.insert(.occlusion)
         arView.automaticallyConfigureSession = false
+        arView.session.delegate = context.coordinator
 
         if ARWorldTrackingConfiguration.isSupported {
             let configuration = ARWorldTrackingConfiguration()
@@ -588,6 +676,8 @@ private struct RouteARSceneView: UIViewRepresentable {
                 overlayId: overlayId
             )
             arView.session.run(configuration)
+        } else {
+            onTrackingStatusChanged(.unavailable)
         }
 
         let tapGesture = UITapGestureRecognizer(
@@ -603,6 +693,9 @@ private struct RouteARSceneView: UIViewRepresentable {
     func updateUIView(_ arView: ARView, context: Context) {
         context.coordinator.isPlacingRouteStart = isPlacingRouteStart
         context.coordinator.onRouteStartPlaced = onRouteStartPlaced
+        context.coordinator.onPlacementRejected = onPlacementRejected
+        context.coordinator.onTrackingStatusChanged = onTrackingStatusChanged
+        context.coordinator.onWorldMapSaved = onWorldMapSaved
         arView.scene.anchors.removeAll()
         renderTrace(in: arView)
     }
@@ -677,20 +770,64 @@ private struct RouteARSceneView: UIViewRepresentable {
         anchor.addChild(label)
     }
 
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, ARSessionDelegate {
         let routeId: UUID
         let overlayId: UUID
         var isPlacingRouteStart = false
         var onRouteStartPlaced: (SIMD3<Float>) -> Void
+        var onPlacementRejected: (String) -> Void
+        var onTrackingStatusChanged: (RouteARTrackingStatus) -> Void
+        var onWorldMapSaved: (Bool) -> Void
 
         init(
             routeId: UUID,
             overlayId: UUID,
-            onRouteStartPlaced: @escaping (SIMD3<Float>) -> Void
+            onRouteStartPlaced: @escaping (SIMD3<Float>) -> Void,
+            onPlacementRejected: @escaping (String) -> Void,
+            onTrackingStatusChanged: @escaping (RouteARTrackingStatus) -> Void,
+            onWorldMapSaved: @escaping (Bool) -> Void
         ) {
             self.routeId = routeId
             self.overlayId = overlayId
             self.onRouteStartPlaced = onRouteStartPlaced
+            self.onPlacementRejected = onPlacementRejected
+            self.onTrackingStatusChanged = onTrackingStatusChanged
+            self.onWorldMapSaved = onWorldMapSaved
+        }
+
+        func session(_ session: ARSession, cameraDidChangeTrackingState camera: ARCamera) {
+            let status: RouteARTrackingStatus
+            switch camera.trackingState {
+            case .normal:
+                status = .ready
+            case .notAvailable:
+                status = .unavailable
+            case .limited(let reason):
+                switch reason {
+                case .initializing:
+                    status = .initializing
+                case .relocalizing:
+                    status = .relocalizing
+                case .excessiveMotion:
+                    status = .limited("hold the phone steady")
+                case .insufficientFeatures:
+                    status = .limited("more visual detail needed")
+                @unknown default:
+                    status = .limited("tracking is limited")
+                }
+            @unknown default:
+                status = .limited("tracking is limited")
+            }
+
+            Task { @MainActor in
+                onTrackingStatusChanged(status)
+            }
+        }
+
+        func session(_ session: ARSession, didFailWithError error: Error) {
+            Task { @MainActor in
+                onTrackingStatusChanged(.unavailable)
+            }
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -700,11 +837,23 @@ private struct RouteARSceneView: UIViewRepresentable {
             }
 
             let location = gesture.location(in: arView)
+            guard let frame = arView.session.currentFrame,
+                  frame.camera.trackingState == .normal else {
+                onPlacementRejected("Wait for wall tracking to become ready, then try again.")
+                return
+            }
+
+            guard frame.worldMappingStatus == .mapped || frame.worldMappingStatus == .extending else {
+                onPlacementRejected("Scan the wall slowly for a moment before setting the route start.")
+                return
+            }
+
             guard let result = arView.raycast(
                 from: location,
                 allowing: .estimatedPlane,
                 alignment: .vertical
             ).first else {
+                onPlacementRejected("Aim at a visible vertical section of the wall and try again.")
                 return
             }
 
@@ -716,14 +865,20 @@ private struct RouteARSceneView: UIViewRepresentable {
             )
             arView.session.getCurrentWorldMap { worldMap, _ in
                 guard let worldMap else {
+                    DispatchQueue.main.async {
+                        self.onWorldMapSaved(false)
+                    }
                     return
                 }
 
-                RouteARWorldMapStore.save(
+                let didSave = RouteARWorldMapStore.save(
                     worldMap,
                     routeId: self.routeId,
                     overlayId: self.overlayId
                 )
+                DispatchQueue.main.async {
+                    self.onWorldMapSaved(didSave)
+                }
             }
             onRouteStartPlaced(worldPosition)
         }
@@ -860,6 +1015,10 @@ private enum RouteARPlacementStore {
         UserDefaults.standard.set(data, forKey: key(routeId: routeId, overlayId: overlayId))
     }
 
+    static func delete(routeId: UUID, overlayId: UUID) {
+        UserDefaults.standard.removeObject(forKey: key(routeId: routeId, overlayId: overlayId))
+    }
+
     private static func key(routeId: UUID, overlayId: UUID) -> String {
         "route-ar-start-position-\(routeId.uuidString)-\(overlayId.uuidString)"
     }
@@ -875,12 +1034,12 @@ private enum RouteARWorldMapStore {
         return try? NSKeyedUnarchiver.unarchivedObject(ofClass: ARWorldMap.self, from: data)
     }
 
-    static func save(_ worldMap: ARWorldMap, routeId: UUID, overlayId: UUID) {
+    static func save(_ worldMap: ARWorldMap, routeId: UUID, overlayId: UUID) -> Bool {
         guard let data = try? NSKeyedArchiver.archivedData(
             withRootObject: worldMap,
             requiringSecureCoding: true
         ) else {
-            return
+            return false
         }
 
         let directory = worldMapsDirectory
@@ -888,7 +1047,16 @@ private enum RouteARWorldMapStore {
             at: directory,
             withIntermediateDirectories: true
         )
-        try? data.write(to: worldMapURL(routeId: routeId, overlayId: overlayId), options: .atomic)
+        do {
+            try data.write(to: worldMapURL(routeId: routeId, overlayId: overlayId), options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    static func delete(routeId: UUID, overlayId: UUID) {
+        try? FileManager.default.removeItem(at: worldMapURL(routeId: routeId, overlayId: overlayId))
     }
 
     private static var worldMapsDirectory: URL {
