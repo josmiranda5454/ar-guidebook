@@ -333,6 +333,7 @@ function renderRouteEditor(entry) {
   document.querySelector("#save-overlay-button")?.addEventListener("click", async () => {
     await saveOverlay(overlay);
   });
+  if (overlay) setupTraceCanvas(overlay);
   document.querySelector("#save-media-button")?.addEventListener("click", async () => {
     await saveMedia(media);
   });
@@ -479,10 +480,41 @@ function overlayEditor(overlay) {
         ${inputField("align-z", "Default align z", alignment.depth_offset_meters, "number", "0.1")}
         ${inputField("align-scale", "Default scale", alignment.scale, "number", "0.05")}
         ${selectField("trace-coordinate-space", "Trace coordinate space", ["normalized_wall_image", "local_wall_meters"], overlay.route_trace.coordinate_space)}
+        <div class="trace-editor"><canvas id="trace-canvas" width="640" height="360" aria-label="Visual route trace editor"></canvas><p class="muted">Click the wall image area to add trace points. The text field remains available for precise edits.</p></div>
         ${textareaField("trace-points", "Trace points", tracePointsToText(overlay.route_trace.points))}
       </div>
     </section>
   `;
+}
+
+function setupTraceCanvas(overlay) {
+  const canvas = document.querySelector("#trace-canvas");
+  if (!canvas || overlay.route_trace.coordinate_space !== "normalized_wall_image") return;
+  const context = canvas.getContext("2d");
+  const draw = () => {
+    const points = parseTracePoints(value("trace-points"));
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#e8e3d7"; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "rgba(40, 40, 40, .18)"; context.lineWidth = 1;
+    for (let x = 0; x <= canvas.width; x += 64) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height); context.stroke(); }
+    for (let y = 0; y <= canvas.height; y += 60) { context.beginPath(); context.moveTo(0, y); context.lineTo(canvas.width, y); context.stroke(); }
+    if (points.length < 2) return;
+    context.strokeStyle = "#f3b51b"; context.lineWidth = 5; context.beginPath();
+    points.forEach((point, index) => { const x = point.x * canvas.width; const y = point.y * canvas.height; index === 0 ? context.moveTo(x, y) : context.lineTo(x, y); });
+    context.stroke();
+    context.fillStyle = "#f3b51b";
+    points.forEach((point) => { context.beginPath(); context.arc(point.x * canvas.width, point.y * canvas.height, 6, 0, Math.PI * 2); context.fill(); });
+  };
+  draw();
+  canvas.addEventListener("click", (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const point = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)), z: null };
+    const points = parseTracePoints(value("trace-points"));
+    points.push(point);
+    document.querySelector("#trace-points").value = tracePointsToText(points);
+    draw();
+  });
+  document.querySelector("#trace-points").addEventListener("input", () => { try { draw(); } catch {} });
 }
 
 function noOverlayEditor() {

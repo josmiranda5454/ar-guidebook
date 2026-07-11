@@ -285,6 +285,20 @@ h2 {
   padding: 3px 8px;
 }
 
+.trace-editor {
+  grid-column: 1 / -1;
+}
+
+.trace-editor canvas {
+  background: #e8e3d7;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: block;
+  max-width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+
 .detail-panel {
   min-height: 430px;
   padding: 18px;

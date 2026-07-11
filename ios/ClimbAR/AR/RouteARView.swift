@@ -434,11 +434,16 @@ private struct RouteTraceProjector {
                 return fallbackNormalizedTrace(overlay.routeTrace.points)
             }
 
+            let normal = simd_normalize(vector(from: wallPlane.normal) ?? SIMD3<Float>(0, 0, 1))
+            let worldUp = abs(simd_dot(normal, SIMD3<Float>(0, 1, 0))) > 0.95 ? SIMD3<Float>(0, 0, 1) : SIMD3<Float>(0, 1, 0)
+            let right = simd_normalize(simd_cross(worldUp, normal))
+            let up = simd_normalize(simd_cross(normal, right))
+
             return overlay.routeTrace.points.map { point in
                 let x = (point.x - 0.5) * wallPlane.widthMeters
                 let y = (0.5 - point.y) * wallPlane.heightMeters
                 let z = point.z ?? 0
-                return center + SIMD3<Float>(x, y, z)
+                return center + (right * x) + (up * y) + (normal * z)
             }
 
         case .localWallMeters:

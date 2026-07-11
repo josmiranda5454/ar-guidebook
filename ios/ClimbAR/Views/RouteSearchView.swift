@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 @MainActor
 final class RouteSearchViewModel: ObservableObject {
