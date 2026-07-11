@@ -144,6 +144,11 @@ struct RouteARView: View {
                 saveCalibrationCapture: saveCalibrationCapture,
                 uploadLatestCapture: uploadLatestCapture,
                 presentRecorderLogin: { isRecorderLoginPresented = true },
+                signOutRecorder: {
+                    ClimbARAPI.logoutRecorder()
+                    hasRecorderSession = false
+                    uploadMessage = "Recorder signed out. Sign in again before uploading."
+                },
                 beginRouteStartPlacement: beginRouteStartPlacement,
                 clearRouteStartPlacement: clearRouteStartPlacement
             )
@@ -287,7 +292,8 @@ struct RouteARView: View {
                 path: "admin/ar-calibration-captures",
                 body: latestCapture
             )
-            uploadMessage = "Uploaded latest calibration snapshot. Refresh Calibration Review to see it."
+            let captureId = latestCapture.id.uuidString.prefix(8)
+            uploadMessage = "Uploaded snapshot \(captureId). Refresh Calibration Review."
         } catch let APIError.requestFailed(statusCode) {
             let status = statusCode.map(String.init) ?? "unknown"
             uploadMessage = "Upload failed (HTTP \(status)). Check the API URL and recorder sign-in."
@@ -323,6 +329,7 @@ private struct RouteARControlPanel: View {
     let saveCalibrationCapture: () -> Void
     let uploadLatestCapture: () async -> Void
     let presentRecorderLogin: () -> Void
+    let signOutRecorder: () -> Void
     let beginRouteStartPlacement: () -> Void
     let clearRouteStartPlacement: () -> Void
 
@@ -501,6 +508,11 @@ private struct RouteARControlPanel: View {
             }
             if let uploadMessage {
                 Text(uploadMessage)
+            }
+
+            if hasRecorderSession {
+                Button("Sign out recorder", action: signOutRecorder)
+                    .font(.caption2.weight(.semibold))
             }
 
             Text("Confirm the route start, holds, and protection against the wall before climbing.")

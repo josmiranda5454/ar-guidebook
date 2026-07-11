@@ -194,7 +194,7 @@ async function loadCaptures() {
     }
 
     renderCalibration();
-    setStatus(`Loaded ${state.captures.length} calibration capture${state.captures.length === 1 ? "" : "s"}.`);
+    setStatus(`Loaded ${state.captures.length} calibration capture${state.captures.length === 1 ? "" : "s"} from ${state.apiBaseUrl}.`);
   } catch (error) {
     renderCalibration();
     setStatus(`Unable to load captures: ${error.message}`);

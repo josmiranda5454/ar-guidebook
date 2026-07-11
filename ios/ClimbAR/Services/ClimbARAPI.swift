@@ -89,6 +89,10 @@ struct ClimbARAPI {
         KeychainRecorderSession.save(result.token)
     }
 
+    static func logoutRecorder() {
+        KeychainRecorderSession.delete()
+    }
+
     private func get<T: Decodable>(path: String) async throws -> T {
         let url = baseURL.appending(path: path)
         return try await get(url: url)
@@ -166,5 +170,14 @@ private enum KeychainRecorderSession {
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    static func delete() {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account,
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }
