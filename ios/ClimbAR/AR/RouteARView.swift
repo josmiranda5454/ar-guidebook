@@ -1,4 +1,5 @@
 import ARKit
+import CoreLocation
 import RealityKit
 import SwiftUI
 import UIKit
@@ -57,6 +58,7 @@ struct RouteARView: View {
     @State private var isPlacingRouteStart = false
     @State private var anchorMessage: String?
     @State private var trackingStatus: RouteARTrackingStatus = .initializing
+    @StateObject private var locationService = LocationService()
 
     init(route: Route, overlay: RouteAROverlay) {
         self.route = route
@@ -100,6 +102,7 @@ struct RouteARView: View {
                 alignment: alignment,
                 routeStartWorldPosition: routeStartWorldPosition,
                 isPlacingRouteStart: isPlacingRouteStart,
+                isTraceVisible: isTraceVisible,
                 onRouteStartPlaced: placeRouteStart,
                 onPlacementRejected: { message in anchorMessage = message },
                 onTrackingStatusChanged: { trackingStatus = $0 },
@@ -126,6 +129,7 @@ struct RouteARView: View {
                 alignmentStatus: alignmentStatus,
                 anchorStatus: anchorStatus,
                 trackingStatus: trackingStatus,
+                locationStatus: locationStatus,
                 alignment: $alignment,
                 isExpanded: $isControlPanelExpanded,
                 captureStatus: captureStatus,
@@ -136,6 +140,7 @@ struct RouteARView: View {
                 isUploading: isUploading,
                 isPlacingRouteStart: isPlacingRouteStart,
                 hasSavedPlacement: routeStartWorldPosition != nil,
+                canPlaceRouteStart: isAtWall,
                 saveCalibrationCapture: saveCalibrationCapture,
                 uploadLatestCapture: uploadLatestCapture,
                 presentRecorderLogin: { isRecorderLoginPresented = true },
@@ -150,6 +155,9 @@ struct RouteARView: View {
         .toolbar(.hidden, for: .tabBar)
         .onChange(of: alignment) { _, newValue in
             RouteARAlignmentStore.save(newValue, routeId: route.id, overlayId: overlay.id)
+        }
+        .task {
+            locationService.requestLocation()
         }
         .sheet(isPresented: $isRecorderLoginPresented) {
             RecorderLoginView { email, password in
@@ -197,7 +205,41 @@ struct RouteARView: View {
             : "Trace anchored to the wall for this session."
     }
 
+    private var proximityState: RouteProximityState {
+        RouteProximityService().state(for: route, userLocation: locationService.userLocation)
+    }
+
+    private var isAtWall: Bool {
+        if case .atWall = proximityState {
+            return true
+        }
+
+        return false
+    }
+
+    private var isTraceVisible: Bool {
+        isAtWall && trackingStatus == .ready
+    }
+
+    private var locationStatus: String {
+        switch proximityState {
+        case .locationUnavailable:
+            "Waiting for precise location"
+        case .outOfRange(let distance):
+            "Move closer to the route · \(formattedDistance(distance))"
+        case .nearby(let distance):
+            "Near the route · move closer to the wall · \(formattedDistance(distance))"
+        case .atWall(let distance):
+            "At the wall · \(formattedDistance(distance))"
+        }
+    }
+
     private func beginRouteStartPlacement() {
+        guard isAtWall else {
+            anchorMessage = locationStatus
+            return
+        }
+
         anchorMessage = nil
         isPlacingRouteStart = true
     }
@@ -250,6 +292,10 @@ struct RouteARView: View {
             uploadMessage = "Upload failed. Check that the backend is reachable."
         }
     }
+
+    private func formattedDistance(_ meters: Double) -> String {
+        meters >= 1000 ? String(format: "%.1f km", meters / 1000) : "(Int(meters.rounded())) m"
+    }
 }
 
 private struct RouteARControlPanel: View {
@@ -259,6 +305,7 @@ private struct RouteARControlPanel: View {
     let alignmentStatus: String
     let anchorStatus: String
     let trackingStatus: RouteARTrackingStatus
+    let locationStatus: String
     @Binding var alignment: RouteARAlignment
     @Binding var isExpanded: Bool
     let captureStatus: String
@@ -269,6 +316,7 @@ private struct RouteARControlPanel: View {
     let isUploading: Bool
     let isPlacingRouteStart: Bool
     let hasSavedPlacement: Bool
+    let canPlaceRouteStart: Bool
     let saveCalibrationCapture: () -> Void
     let uploadLatestCapture: () async -> Void
     let presentRecorderLogin: () -> Void
@@ -290,6 +338,10 @@ private struct RouteARControlPanel: View {
                     Label(trackingStatus.message, systemImage: trackingStatus.systemImage)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(trackingStatus.color)
+
+                    Label(locationStatus, systemImage: "location.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
@@ -466,7 +518,7 @@ private struct RouteARControlPanel: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isPlacingRouteStart)
+            .disabled(isPlacingRouteStart || !canPlaceRouteStart)
 
             Text(anchorStatus)
                 .font(.caption2)
@@ -645,6 +697,7 @@ private struct RouteARSceneView: UIViewRepresentable {
     let alignment: RouteARAlignment
     let routeStartWorldPosition: SIMD3<Float>?
     let isPlacingRouteStart: Bool
+    let isTraceVisible: Bool
     let onRouteStartPlaced: (SIMD3<Float>) -> Void
     let onPlacementRejected: (String) -> Void
     let onTrackingStatusChanged: (RouteARTrackingStatus) -> Void
@@ -701,6 +754,10 @@ private struct RouteARSceneView: UIViewRepresentable {
     }
 
     private func renderTrace(in arView: ARView) {
+        guard isTraceVisible else {
+            return
+        }
+
         let projectedPoints = RouteTraceProjector().project(overlay: overlay, alignment: alignment)
         let points = anchoredPoints(projectedPoints)
         guard points.count >= 2 else {
