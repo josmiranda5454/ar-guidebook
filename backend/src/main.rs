@@ -163,7 +163,15 @@ async fn import_seed() {
 }
 
 async fn health() -> impl IntoResponse {
-    Json(serde_json::json!({ "status": "ok" }))
+    Json(health_payload())
+}
+
+fn health_payload() -> serde_json::Value {
+    serde_json::json!({
+        "status": "ok",
+        "service": "climbar-backend",
+        "version": env!("CARGO_PKG_VERSION"),
+    })
 }
 
 async fn list_areas(State(state): State<AppState>) -> Result<Json<Vec<Area>>, StatusCode> {
@@ -709,7 +717,16 @@ fn server_addr(host: Option<String>, port: Option<String>) -> SocketAddr {
 
 #[cfg(test)]
 mod tests {
-    use super::server_addr;
+    use super::{health_payload, server_addr};
+
+    #[test]
+    fn health_payload_identifies_the_running_service() {
+        let payload = health_payload();
+
+        assert_eq!(payload["status"], "ok");
+        assert_eq!(payload["service"], "climbar-backend");
+        assert_eq!(payload["version"], env!("CARGO_PKG_VERSION"));
+    }
 
     #[test]
     fn server_addr_defaults_to_localhost() {
