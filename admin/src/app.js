@@ -12,6 +12,8 @@ import {
   reviewCalibrationCapture,
   updateOverlay,
   updateMedia,
+  updateArea,
+  updateWall,
   updateRoute,
 } from "./api.js";
 import { draftArea, draftOverlay, draftRoute, draftWall } from "./drafts.js";
@@ -194,7 +196,14 @@ function renderActiveView() {
 function renderGuidebook() {
   renderActiveView();
   renderRouteList();
-  renderRouteEditor(selectedRouteEntry());
+  const entry = selectedRouteEntry();
+  if (entry) {
+    renderRouteEditor(entry);
+  } else if (selectedWall()) {
+    renderWallEditor(selectedWall());
+  } else {
+    renderAreaEditor(selectedArea());
+  }
 }
 
 function renderCalibration() {
@@ -220,7 +229,7 @@ function renderRouteList() {
     areaRow.addEventListener("click", () => {
       state.selectedAreaId = area.id;
       state.selectedWallId = area.walls[0]?.id ?? null;
-      state.selectedRouteId = area.walls[0]?.routes[0]?.id ?? null;
+      state.selectedRouteId = null;
       renderGuidebook();
     });
     elements.routeList.append(areaRow);
@@ -231,7 +240,7 @@ function renderRouteList() {
       wallRow.addEventListener("click", () => {
         state.selectedAreaId = area.id;
         state.selectedWallId = wall.id;
-        state.selectedRouteId = wall.routes[0]?.id ?? null;
+        state.selectedRouteId = null;
         renderGuidebook();
       });
       elements.routeList.append(wallRow);
@@ -324,6 +333,57 @@ function renderRouteEditor(entry) {
   });
   document.querySelector("#save-media-button")?.addEventListener("click", async () => {
     await saveMedia(media);
+  });
+}
+
+function renderAreaEditor(area) {
+  if (!area) {
+    elements.routeEditor.innerHTML = `<div class="empty-state"><h2>Select an area</h2><p>Choose an area, wall, or route from the guidebook hierarchy.</p></div>`;
+    return;
+  }
+  elements.routeEditor.innerHTML = entityForm("area", area, `Area: ${area.name}`, [
+    inputField("entity-name", "Name", area.name), inputField("entity-slug", "Slug", area.slug),
+    textareaField("entity-description", "Description", area.description), textareaField("entity-notes", "Access notes", area.access_notes ?? ""),
+    geoFields(area.location),
+  ]);
+  bindEntityForm("area", area);
+}
+
+function renderWallEditor(wall) {
+  elements.routeEditor.innerHTML = entityForm("wall", wall, `Wall: ${wall.name}`, [
+    inputField("entity-name", "Name", wall.name), inputField("entity-slug", "Slug", wall.slug),
+    textareaField("entity-description", "Description", wall.description), textareaField("entity-notes", "Approach notes", wall.approach_notes ?? ""),
+    inputField("entity-aspect", "Aspect", wall.aspect ?? ""), geoFields(wall.location),
+  ]);
+  bindEntityForm("wall", wall);
+}
+
+function entityForm(kind, entity, title, fields) {
+  const childCount = entity.walls?.length ?? entity.routes?.length ?? 0;
+  return `<form id="entity-editor-form" class="editor-form"><section class="form-section"><div class="detail-header"><div><h2>${escapeHtml(title)}</h2><p class="muted">Edit the ${kind} properties defined by the guidebook schema.</p></div><span class="badge">${childCount} ${childCount === 1 ? "child" : "children"}</span></div><div class="form-grid">${fields.join("")}</div></section><div class="actions"><button type="submit">Save ${kind}</button></div></form>`;
+}
+
+function geoFields(location) {
+  return [inputField("entity-latitude", "Latitude", location.latitude, "number", "0.000001"), inputField("entity-longitude", "Longitude", location.longitude, "number", "0.000001"), inputField("entity-elevation", "Elevation meters", location.elevation_meters ?? "", "number", "0.1")].join("");
+}
+
+function bindEntityForm(kind, entity) {
+  document.querySelector("#entity-editor-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const location = { latitude: requiredNumber("entity-latitude"), longitude: requiredNumber("entity-longitude"), elevation_meters: optionalNumber("entity-elevation") };
+    const payload = { ...entity, name: value("entity-name"), slug: value("entity-slug"), description: value("entity-description"), location };
+    if (kind === "area") payload.access_notes = optionalText("entity-notes");
+    if (kind === "wall") { payload.approach_notes = optionalText("entity-notes"); payload.aspect = optionalText("entity-aspect"); }
+    setBusy(true, `Saving ${kind}...`);
+    try {
+      const updated = kind === "area" ? await updateArea(state.apiBaseUrl, payload) : await updateWall(state.apiBaseUrl, payload);
+      if (kind === "area") state.areas = state.areas.map((area) => area.id === updated.id ? updated : area);
+      else state.areas = state.areas.map((area) => ({ ...area, walls: area.walls.map((wall) => wall.id === updated.id ? updated : wall) }));
+      state.routes = flattenRoutes(state.areas);
+      renderGuidebook();
+      setStatus(`${kind[0].toUpperCase()}${kind.slice(1)} saved.`);
+    } catch (error) { setStatus(`Unable to save ${kind}: ${error.message}`); }
+    finally { setBusy(false); }
   });
 }
 
@@ -436,6 +496,7 @@ async function createWallFromPrompt() {
     state.routes = flattenRoutes(state.areas);
     state.selectedAreaId = area.id;
     state.selectedWallId = wall.id;
+    state.selectedRouteId = null;
     renderGuidebook();
     setStatus(`Created wall "${wall.name}".`);
   } catch (error) {

@@ -22,6 +22,10 @@ import {
   updateOverlayUrl,
   updateMedia,
   updateMediaUrl,
+  updateArea,
+  updateAreaUrl,
+  updateWall,
+  updateWallUrl,
   updateRoute,
   updateRouteUrl,
 } from "../src/api.js";
@@ -87,6 +91,18 @@ test("builds authentication and publish endpoint URLs", () => {
   assert.equal(loginUrl("http://localhost:8080/api/v1/"), "http://localhost:8080/api/v1/admin/auth/login");
   assert.equal(publishAreaPackUrl("http://localhost:8080/api/v1", "area-1"), "http://localhost:8080/api/v1/admin/offline-packs/areas/area-1/publish");
   assert.equal(updateMediaUrl("http://localhost:8080/api/v1", "media-1"), "http://localhost:8080/api/v1/admin/media/media-1");
+  assert.equal(updateAreaUrl("http://localhost:8080/api/v1", "area-1"), "http://localhost:8080/api/v1/admin/areas/area-1");
+  assert.equal(updateWallUrl("http://localhost:8080/api/v1", "wall-1"), "http://localhost:8080/api/v1/admin/walls/wall-1");
+});
+
+test("area and wall updates use PUT with JSON", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => { calls.push({ url, options }); return Response.json(JSON.parse(options.body)); };
+  await updateArea("http://localhost:8080/api/v1", { id: "area-1", name: "Edited Area" }, fetchImpl);
+  await updateWall("http://localhost:8080/api/v1", { id: "wall-1", name: "Edited Wall" }, fetchImpl);
+  assert.deepEqual(calls.map(({ options }) => options.method), ["PUT", "PUT"]);
+  assert.deepEqual(JSON.parse(calls[0].options.body), { id: "area-1", name: "Edited Area" });
+  assert.deepEqual(JSON.parse(calls[1].options.body), { id: "wall-1", name: "Edited Wall" });
 });
 
 test("media updates use PUT with JSON", async () => {

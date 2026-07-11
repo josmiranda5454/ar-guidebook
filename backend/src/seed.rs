@@ -322,6 +322,31 @@ impl GuideRepository for SeedStore {
         Ok(Some(wall))
     }
 
+    async fn update_area(&self, area_id: Uuid, mut area: Area) -> RepositoryResult<Option<Area>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+        let Some(existing) = areas.iter_mut().find(|existing| existing.id == area_id) else {
+            return Ok(None);
+        };
+        area.id = area_id;
+        area.walls = existing.walls.clone();
+        *existing = area.clone();
+        Ok(Some(area))
+    }
+
+    async fn update_wall(&self, wall_id: Uuid, mut wall: Wall) -> RepositoryResult<Option<Wall>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+        for existing in areas.iter_mut().flat_map(|area| area.walls.iter_mut()) {
+            if existing.id == wall_id {
+                wall.id = wall_id;
+                wall.area_id = existing.area_id;
+                wall.routes = existing.routes.clone();
+                *existing = wall.clone();
+                return Ok(Some(wall));
+            }
+        }
+        Ok(None)
+    }
+
     async fn create_route(&self, mut route: Route) -> RepositoryResult<Option<Route>> {
         let mut areas = self.areas.lock().expect("seed area store lock");
 

@@ -73,6 +73,8 @@ async fn main() {
         .route("/api/v1/admin/routes", post(create_route))
         .route("/api/v1/admin/ar-overlays", post(create_ar_overlay))
         .route("/api/v1/admin/routes/:route_id", put(update_route))
+        .route("/api/v1/admin/areas/:area_id", put(update_area))
+        .route("/api/v1/admin/walls/:wall_id", put(update_wall))
         .route(
             "/api/v1/admin/ar-overlays/:overlay_id",
             put(update_ar_overlay),
@@ -310,6 +312,38 @@ async fn create_wall(
         .await
         .map_err(status_from_repository_error)?
         .map(|wall| (StatusCode::CREATED, Json(wall)))
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn update_area(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(area_id): Path<Uuid>,
+    Json(area): Json<Area>,
+) -> Result<Json<Area>, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    state
+        .repository
+        .update_area(area_id, area)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn update_wall(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(wall_id): Path<Uuid>,
+    Json(wall): Json<Wall>,
+) -> Result<Json<Wall>, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    state
+        .repository
+        .update_wall(wall_id, wall)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
 

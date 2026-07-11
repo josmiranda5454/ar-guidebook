@@ -50,8 +50,16 @@ export function createAreaUrl(apiBaseUrl) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/areas`;
 }
 
+export function updateAreaUrl(apiBaseUrl, areaId) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/areas/${areaId}`;
+}
+
 export function createWallUrl(apiBaseUrl) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/walls`;
+}
+
+export function updateWallUrl(apiBaseUrl, wallId) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/walls/${wallId}`;
 }
 
 export function createRouteUrl(apiBaseUrl) {
@@ -119,6 +127,14 @@ export async function createWall(apiBaseUrl, wall, fetchImpl = fetch) {
   return postJson(createWallUrl(apiBaseUrl), wall, fetchImpl);
 }
 
+export async function updateArea(apiBaseUrl, area, fetchImpl = fetch) {
+  return putJson(updateAreaUrl(apiBaseUrl, area.id), area, fetchImpl);
+}
+
+export async function updateWall(apiBaseUrl, wall, fetchImpl = fetch) {
+  return putJson(updateWallUrl(apiBaseUrl, wall.id), wall, fetchImpl);
+}
+
 export async function createRoute(apiBaseUrl, route, fetchImpl = fetch) {
   return postJson(createRouteUrl(apiBaseUrl), route, fetchImpl);
 }
@@ -150,6 +166,15 @@ async function postJson(url, body, fetchImpl) {
     body: JSON.stringify(body),
   });
 
+  return parseJsonResponse(response);
+}
+
+async function putJson(url, body, fetchImpl) {
+  const response = await fetchImpl(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...adminAuthHeaders() },
+    body: JSON.stringify(body),
+  });
   return parseJsonResponse(response);
 }
 

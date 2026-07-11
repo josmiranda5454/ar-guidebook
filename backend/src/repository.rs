@@ -48,6 +48,8 @@ pub trait GuideRepository: Send + Sync {
     async fn publish_offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>>;
     async fn create_area(&self, area: Area) -> RepositoryResult<Area>;
     async fn create_wall(&self, wall: Wall) -> RepositoryResult<Option<Wall>>;
+    async fn update_area(&self, area_id: Uuid, area: Area) -> RepositoryResult<Option<Area>>;
+    async fn update_wall(&self, wall_id: Uuid, wall: Wall) -> RepositoryResult<Option<Wall>>;
     async fn create_route(&self, route: Route) -> RepositoryResult<Option<Route>>;
     async fn create_ar_overlay(
         &self,

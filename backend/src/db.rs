@@ -929,6 +929,27 @@ impl GuideRepository for PgGuideRepository {
         self.wall(wall.id).await
     }
 
+    async fn update_area(&self, area_id: Uuid, mut area: Area) -> RepositoryResult<Option<Area>> {
+        if self.area(area_id).await?.is_none() {
+            return Ok(None);
+        }
+        area.id = area_id;
+        area.walls.clear();
+        self.upsert_area(&area).await?;
+        self.area(area_id).await
+    }
+
+    async fn update_wall(&self, wall_id: Uuid, mut wall: Wall) -> RepositoryResult<Option<Wall>> {
+        let Some(existing) = self.wall(wall_id).await? else {
+            return Ok(None);
+        };
+        wall.id = wall_id;
+        wall.area_id = existing.area_id;
+        wall.routes.clear();
+        self.upsert_wall(&wall).await?;
+        self.wall(wall_id).await
+    }
+
     async fn create_route(&self, mut route: Route) -> RepositoryResult<Option<Route>> {
         if self.wall(route.wall_id).await?.is_none() {
             return Ok(None);
