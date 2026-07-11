@@ -5,6 +5,17 @@ export const REVIEW_STATUSES = [
   "applied",
 ];
 
+let adminToken = globalThis.localStorage?.getItem("climbar-admin-token") ?? "";
+
+export function setAdminToken(token) {
+  adminToken = token ?? "";
+  globalThis.localStorage?.setItem("climbar-admin-token", adminToken);
+}
+
+export function adminAuthHeaders() {
+  return adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
+}
+
 export function normalizeApiBaseUrl(value) {
   return value.trim().replace(/\/+$/, "");
 }
@@ -59,8 +70,35 @@ export function updateOverlayUrl(apiBaseUrl, overlayId) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/ar-overlays/${overlayId}`;
 }
 
+export function loginUrl(apiBaseUrl) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/auth/login`;
+}
+
+export function publishAreaPackUrl(apiBaseUrl, areaId) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/offline-packs/areas/${areaId}/publish`;
+}
+
+export async function login(apiBaseUrl, email, password, fetchImpl = fetch) {
+  const response = await fetchImpl(loginUrl(apiBaseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const result = await parseJsonResponse(response);
+  setAdminToken(result.token);
+  return result;
+}
+
+export async function publishAreaPack(apiBaseUrl, areaId, fetchImpl = fetch) {
+  const response = await fetchImpl(publishAreaPackUrl(apiBaseUrl, areaId), {
+    method: "POST",
+    headers: adminAuthHeaders(),
+  });
+  return parseJsonResponse(response);
+}
+
 export async function listCalibrationCaptures(apiBaseUrl, filters = {}, fetchImpl = fetch) {
-  const response = await fetchImpl(calibrationCaptureListUrl(apiBaseUrl, filters));
+  const response = await fetchImpl(calibrationCaptureListUrl(apiBaseUrl, filters), { headers: adminAuthHeaders() });
   return parseJsonResponse(response);
 }
 
@@ -90,6 +128,7 @@ export async function updateRoute(apiBaseUrl, route, fetchImpl = fetch) {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
+      ...adminAuthHeaders(),
     },
     body: JSON.stringify(route),
   });
@@ -102,6 +141,7 @@ async function postJson(url, body, fetchImpl) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...adminAuthHeaders(),
     },
     body: JSON.stringify(body),
   });
@@ -114,6 +154,7 @@ export async function updateOverlay(apiBaseUrl, overlay, fetchImpl = fetch) {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
+      ...adminAuthHeaders(),
     },
     body: JSON.stringify(overlay),
   });
@@ -132,6 +173,7 @@ export async function reviewCalibrationCapture(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...adminAuthHeaders(),
     },
     body: JSON.stringify({
       review_status: reviewStatus,
@@ -145,6 +187,7 @@ export async function reviewCalibrationCapture(
 export async function applyCalibrationCapture(apiBaseUrl, overlayId, captureId, fetchImpl = fetch) {
   const response = await fetchImpl(applyCaptureUrl(apiBaseUrl, overlayId, captureId), {
     method: "POST",
+    headers: adminAuthHeaders(),
   });
 
   return parseJsonResponse(response);

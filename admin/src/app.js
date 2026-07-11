@@ -6,7 +6,9 @@ import {
   createRoute,
   createWall,
   listAreas,
+  login,
   listCalibrationCaptures,
+  publishAreaPack,
   reviewCalibrationCapture,
   updateOverlay,
   updateRoute,
@@ -23,11 +25,15 @@ const state = {
   selectedRouteId: null,
   captures: [],
   selectedCaptureId: null,
+  authenticated: Boolean(globalThis.localStorage?.getItem("climbar-admin-token")),
 };
 
 const elements = {
   apiForm: document.querySelector("#api-form"),
   apiBaseUrl: document.querySelector("#api-base-url"),
+  authForm: document.querySelector("#auth-form"),
+  adminEmail: document.querySelector("#admin-email"),
+  adminPassword: document.querySelector("#admin-password"),
   tabButtons: [...document.querySelectorAll(".tab-button")],
   routeFilter: document.querySelector("#route-filter"),
   overlayFilter: document.querySelector("#overlay-filter"),
@@ -54,6 +60,18 @@ elements.apiForm.addEventListener("submit", (event) => {
   loadActiveView();
 });
 
+elements.authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await login(state.apiBaseUrl, elements.adminEmail.value, elements.adminPassword.value);
+    state.authenticated = true;
+    setStatus("Signed in.");
+    await loadActiveView();
+  } catch (error) {
+    setStatus(`Unable to sign in: ${error.message}`);
+  }
+});
+
 elements.refreshButton.addEventListener("click", () => {
   loadActiveView();
 });
@@ -72,6 +90,10 @@ elements.createRouteButton.addEventListener("click", () => {
 
 elements.createOverlayButton.addEventListener("click", () => {
   createOverlayForSelectedRoute();
+});
+
+document.querySelector("#publish-pack-button").addEventListener("click", () => {
+  publishSelectedArea();
 });
 
 for (const button of elements.tabButtons) {
@@ -111,6 +133,19 @@ async function loadGuidebook() {
   } finally {
     setBusy(false);
   }
+}
+
+async function publishSelectedArea() {
+  const entry = selectedRouteEntry();
+  const area = entry?.area ?? state.areas[0];
+  if (!area) { setStatus("Load an area before publishing."); return; }
+  setBusy(true, "Publishing offline pack...");
+  try {
+    const pack = await publishAreaPack(state.apiBaseUrl, area.id);
+    setStatus(`Published ${area.name} offline pack v${pack.version}.`);
+  } catch (error) {
+    setStatus(`Unable to publish offline pack: ${error.message}`);
+  } finally { setBusy(false); }
 }
 
 async function loadCaptures() {

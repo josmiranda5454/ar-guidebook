@@ -13,6 +13,9 @@ import {
   createRouteUrl,
   createWall,
   createWallUrl,
+  loginUrl,
+  publishAreaPack,
+  publishAreaPackUrl,
   reviewCalibrationCapture,
   reviewCaptureUrl,
   updateOverlay,
@@ -76,6 +79,23 @@ test("builds guidebook editor endpoint URLs", () => {
     createOverlayUrl("http://localhost:8080/api/v1"),
     "http://localhost:8080/api/v1/admin/ar-overlays",
   );
+});
+
+test("builds authentication and publish endpoint URLs", () => {
+  assert.equal(loginUrl("http://localhost:8080/api/v1/"), "http://localhost:8080/api/v1/admin/auth/login");
+  assert.equal(publishAreaPackUrl("http://localhost:8080/api/v1", "area-1"), "http://localhost:8080/api/v1/admin/offline-packs/areas/area-1/publish");
+});
+
+test("publish request includes the admin bearer token when configured", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return Response.json({ version: 2 });
+  };
+
+  await publishAreaPack("http://localhost:8080/api/v1", "area-1", fetchImpl);
+  assert.equal(calls[0].options.method, "POST");
+  assert.ok("headers" in calls[0].options);
 });
 
 test("review request sends expected JSON payload", async () => {

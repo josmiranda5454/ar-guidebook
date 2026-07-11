@@ -12,6 +12,7 @@ use uuid::Uuid;
 pub struct SeedStore {
     areas: Mutex<Vec<Area>>,
     calibration_captures: Mutex<Vec<RouteCalibrationCapture>>,
+    published_packs: Mutex<Vec<OfflinePack>>,
 }
 
 impl SeedStore {
@@ -127,9 +128,24 @@ impl SeedStore {
             walls: vec![wall],
         };
 
+        let initial_pack = OfflinePack {
+            id: Uuid::new_v4(),
+            area_id,
+            version: 1,
+            generated_at: Utc::now(),
+            areas: vec![area.clone()],
+            assets: area
+                .walls
+                .iter()
+                .flat_map(|wall| wall.routes.iter())
+                .flat_map(|route| route.media.iter().cloned())
+                .collect(),
+        };
+
         Self {
             areas: Mutex::new(vec![area]),
             calibration_captures: Mutex::new(Vec::new()),
+            published_packs: Mutex::new(vec![initial_pack]),
         }
     }
 
@@ -147,22 +163,13 @@ impl SeedStore {
     }
 
     pub fn offline_pack_seed(&self, area_id: Uuid) -> Option<OfflinePack> {
-        let area = self.area_seed(area_id)?;
-        let assets = area
-            .walls
+        self.published_packs
+            .lock()
+            .expect("pack store lock")
             .iter()
-            .flat_map(|wall| wall.routes.iter())
-            .flat_map(|route| route.media.iter().cloned())
-            .collect();
-
-        Some(OfflinePack {
-            id: Uuid::new_v4(),
-            area_id,
-            version: 1,
-            generated_at: Utc::now(),
-            areas: vec![area],
-            assets,
-        })
+            .filter(|pack| pack.area_id == area_id)
+            .max_by_key(|pack| pack.version)
+            .cloned()
     }
 
     pub fn wall_seed(&self, wall_id: Uuid) -> Option<Wall> {
@@ -232,6 +239,41 @@ impl GuideRepository for SeedStore {
 
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
         Ok(self.offline_pack_seed(area_id))
+    }
+
+    async fn publish_offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
+        let area = match self.area_seed(area_id) {
+            Some(area) => area,
+            None => return Ok(None),
+        };
+        let version = self
+            .published_packs
+            .lock()
+            .expect("pack store lock")
+            .iter()
+            .filter(|pack| pack.area_id == area_id)
+            .map(|pack| pack.version)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let pack = OfflinePack {
+            id: Uuid::new_v4(),
+            area_id,
+            version,
+            generated_at: Utc::now(),
+            assets: area
+                .walls
+                .iter()
+                .flat_map(|wall| wall.routes.iter())
+                .flat_map(|route| route.media.iter().cloned())
+                .collect(),
+            areas: vec![area],
+        };
+        self.published_packs
+            .lock()
+            .expect("pack store lock")
+            .push(pack.clone());
+        Ok(Some(pack))
     }
 
     async fn create_area(&self, mut area: Area) -> RepositoryResult<Area> {

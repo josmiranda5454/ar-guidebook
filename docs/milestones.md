@@ -78,6 +78,10 @@ Goal: Provide a separate admin workflow for route data and AR calibration.
 - Route trace editor.
 - AR overlay review and version publishing.
 
+Implemented in the current development milestone: bearer-token admin sessions,
+protected admin writes/review operations, and durable versioned offline-pack
+publishing backed by Postgres snapshots.
+
 Exit criteria:
 
 - Admins can publish a new offline pack version without app changes.

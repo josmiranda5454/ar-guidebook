@@ -838,25 +838,45 @@ impl GuideRepository for PgGuideRepository {
     }
 
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
+        let row = sqlx::query("SELECT payload FROM offline_pack_versions WHERE area_id = $1 ORDER BY version DESC LIMIT 1")
+            .bind(area_id).fetch_optional(&self.pool).await?;
+        row.map(|row| {
+            let payload: serde_json::Value = row.try_get("payload")?;
+            serde_json::from_value(payload)
+                .map_err(|error| RepositoryError::Decode(error.to_string()))
+        })
+        .transpose()
+    }
+
+    async fn publish_offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
         let area = match self.area(area_id).await? {
             Some(area) => area,
             None => return Ok(None),
         };
-        let assets = area
-            .walls
-            .iter()
-            .flat_map(|wall| wall.routes.iter())
-            .flat_map(|route| route.media.iter().cloned())
-            .collect();
-
-        Ok(Some(OfflinePack {
+        let version: i32 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM offline_pack_versions WHERE area_id = $1",
+        )
+        .bind(area_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let pack = OfflinePack {
             id: Uuid::new_v4(),
             area_id,
-            version: 1,
+            version: version as u32,
             generated_at: Utc::now(),
+            assets: area
+                .walls
+                .iter()
+                .flat_map(|wall| wall.routes.iter())
+                .flat_map(|route| route.media.iter().cloned())
+                .collect(),
             areas: vec![area],
-            assets,
-        }))
+        };
+        let payload = serde_json::to_value(&pack)
+            .map_err(|error| RepositoryError::Decode(error.to_string()))?;
+        sqlx::query("INSERT INTO offline_pack_versions (id, area_id, version, generated_at, payload) VALUES ($1, $2, $3, $4, $5)")
+            .bind(pack.id).bind(area_id).bind(version).bind(pack.generated_at).bind(payload).execute(&self.pool).await?;
+        Ok(Some(pack))
     }
 
     async fn create_area(&self, mut area: Area) -> RepositoryResult<Area> {

@@ -4,6 +4,7 @@ import SwiftUI
 final class AreaDetailViewModel: ObservableObject {
     @Published var area: Area
     @Published var isDownloaded = false
+    @Published var downloadedVersion: UInt32?
     @Published var isDownloading = false
     @Published var statusMessage: String?
 
@@ -23,6 +24,7 @@ final class AreaDetailViewModel: ObservableObject {
             return
         }
 
+        downloadedVersion = pack.version
         area = cachedArea
     }
 
@@ -38,7 +40,8 @@ final class AreaDetailViewModel: ObservableObject {
                 area = downloadedArea
             }
             isDownloaded = true
-            statusMessage = "Downloaded for offline use."
+            downloadedVersion = pack.version
+            statusMessage = "Offline pack v\(pack.version) downloaded."
         } catch {
             statusMessage = "Could not download this area."
         }
@@ -87,6 +90,11 @@ struct AreaDetailView: View {
 
                 if let statusMessage = viewModel.statusMessage {
                     Text(statusMessage)
+                        .foregroundStyle(.secondary)
+                }
+                if let downloadedVersion = viewModel.downloadedVersion {
+                    Text("Offline pack v\(downloadedVersion)")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }

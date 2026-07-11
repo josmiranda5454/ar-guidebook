@@ -34,6 +34,12 @@ CLIMBAR_DATABASE_URL=postgres://climbar:climbar@127.0.0.1:5432/climbar cargo run
 CLIMBAR_DATABASE_URL=postgres://climbar:climbar@127.0.0.1:5432/climbar cargo run
 ```
 
+The local admin API uses development credentials by default: `admin@example.com`
+and `dev-password`. Set `CLIMBAR_ADMIN_EMAIL`, `CLIMBAR_ADMIN_PASSWORD`, and
+`CLIMBAR_ADMIN_TOKEN` before starting the backend to change them. Guidebook
+mutations and calibration review require the bearer token returned by the admin
+login endpoint.
+
 Open the iOS app in Xcode:
 
 ```sh
@@ -50,6 +56,10 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:5173`.
+
+Sign in to the admin UI, edit guidebook data, then use **Publish Offline Pack**.
+The iOS app downloads the latest published version when the user taps **Update
+Offline Area** or pulls to refresh a downloaded area.
 
 For a physical iPhone, the backend must listen on your Mac's network interface:
 

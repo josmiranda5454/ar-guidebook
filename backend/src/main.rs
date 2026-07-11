@@ -1,8 +1,10 @@
+mod auth;
 mod db;
 mod models;
 mod repository;
 mod seed;
 
+use axum::http::HeaderMap;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -26,6 +28,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 struct AppState {
     repository: Arc<dyn GuideRepository>,
+    admin_token: String,
 }
 
 #[tokio::main]
@@ -45,8 +48,10 @@ async fn main() {
         return;
     }
 
+    let (_, _, admin_token) = auth::configured_admin_credentials();
     let state = AppState {
         repository: configure_repository().await,
+        admin_token,
     };
 
     let app = Router::new()
@@ -57,6 +62,11 @@ async fn main() {
         .route("/api/v1/routes/:route_id", get(get_route))
         .route("/api/v1/search", get(search_routes))
         .route("/api/v1/offline-packs/areas/:area_id", get(get_area_pack))
+        .route("/api/v1/admin/auth/login", post(admin_login))
+        .route(
+            "/api/v1/admin/offline-packs/areas/:area_id/publish",
+            post(publish_area_pack),
+        )
         .route("/api/v1/admin/areas", post(create_area))
         .route("/api/v1/admin/walls", post(create_wall))
         .route("/api/v1/admin/routes", post(create_route))
@@ -125,6 +135,13 @@ async fn import_seed() {
         .import_seed(&seed.areas_seed())
         .await
         .expect("import seed data");
+
+    for area in seed.areas_seed() {
+        repository
+            .publish_offline_pack(area.id)
+            .await
+            .expect("publish seed pack");
+    }
 
     tracing::info!("seed data imported");
 }
@@ -211,10 +228,43 @@ async fn get_area_pack(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+#[derive(Deserialize)]
+struct AdminLoginRequest {
+    email: String,
+    password: String,
+}
+
+async fn admin_login(
+    Json(login): Json<AdminLoginRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let (email, password, token) = auth::configured_admin_credentials();
+    if login.email != email || login.password != password {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(Json(serde_json::json!({ "token": token, "email": email })))
+}
+
+async fn publish_area_pack(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(area_id): Path<Uuid>,
+) -> Result<Json<OfflinePack>, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    state
+        .repository
+        .publish_offline_pack(area_id)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
 async fn create_area(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(area): Json<Area>,
 ) -> Result<(StatusCode, Json<Area>), StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .create_area(area)
@@ -225,8 +275,10 @@ async fn create_area(
 
 async fn create_wall(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(wall): Json<Wall>,
 ) -> Result<(StatusCode, Json<Wall>), StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .create_wall(wall)
@@ -238,8 +290,10 @@ async fn create_wall(
 
 async fn create_route(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(route): Json<Route>,
 ) -> Result<(StatusCode, Json<Route>), StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .create_route(route)
@@ -251,8 +305,10 @@ async fn create_route(
 
 async fn create_ar_overlay(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(overlay): Json<RouteArOverlay>,
 ) -> Result<(StatusCode, Json<RouteArOverlay>), StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .create_ar_overlay(overlay)
@@ -264,9 +320,11 @@ async fn create_ar_overlay(
 
 async fn update_route(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(route_id): Path<Uuid>,
     Json(route): Json<Route>,
 ) -> Result<Json<Route>, StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .update_route(route_id, route)
@@ -278,9 +336,11 @@ async fn update_route(
 
 async fn update_ar_overlay(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(overlay_id): Path<Uuid>,
     Json(overlay): Json<RouteArOverlay>,
 ) -> Result<Json<RouteArOverlay>, StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .update_ar_overlay(overlay_id, overlay)
@@ -298,8 +358,10 @@ struct CalibrationCaptureQuery {
 
 async fn list_calibration_captures(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<CalibrationCaptureQuery>,
 ) -> Result<Json<Vec<RouteCalibrationCapture>>, StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .calibration_captures(query.route_id, query.overlay_id)
@@ -310,8 +372,10 @@ async fn list_calibration_captures(
 
 async fn create_calibration_capture(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(capture): Json<RouteCalibrationCapture>,
 ) -> Result<(StatusCode, Json<RouteCalibrationCapture>), StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .create_calibration_capture(capture)
@@ -328,9 +392,11 @@ struct ReviewCalibrationCaptureRequest {
 
 async fn review_calibration_capture(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(capture_id): Path<Uuid>,
     Json(review): Json<ReviewCalibrationCaptureRequest>,
 ) -> Result<Json<RouteCalibrationCapture>, StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .review_calibration_capture(capture_id, review.review_status, review.reviewer_notes)
@@ -342,8 +408,10 @@ async fn review_calibration_capture(
 
 async fn apply_calibration_capture(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((overlay_id, capture_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<RouteArOverlay>, StatusCode> {
+    auth::authorize(&headers, &state)?;
     state
         .repository
         .apply_calibration_capture_to_overlay(overlay_id, capture_id)
