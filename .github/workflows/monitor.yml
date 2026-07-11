@@ -1,0 +1,25 @@
+name: Monitor Hosted API
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  health-check:
+    name: Check hosted API health
+    if: ${{ vars.MONITORING_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request health endpoint
+        env:
+          HEALTHCHECK_URL: ${{ secrets.CLIMBAR_HEALTHCHECK_URL }}
+        run: |
+          test -n "$HEALTHCHECK_URL" || {
+            echo "CLIMBAR_HEALTHCHECK_URL is required when monitoring is enabled" >&2
+            exit 1
+          }
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 "$HEALTHCHECK_URL"

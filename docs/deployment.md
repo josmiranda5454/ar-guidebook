@@ -18,6 +18,9 @@ CLIMBAR_PORT=8080
 CLIMBAR_ADMIN_EMAIL=admin@example.com
 CLIMBAR_ADMIN_PASSWORD=change-me
 CLIMBAR_ADMIN_TOKEN=replace-with-a-long-random-token
+CLIMBAR_RECORDER_TOKEN=replace-with-a-different-long-random-token
+CLIMBAR_ALLOWED_ORIGINS=https://your-admin-site.onrender.com
+CLIMBAR_ENV=production
 ```
 
 For an eventual hosted environment, put the API behind TLS and a reverse
@@ -56,7 +59,8 @@ environment and add these settings:
    Render deploy hook. Keep the hook secret and require approval for production
    deployments if desired.
 3. Configure Render's API service environment variables from the list above,
-   using the internal Postgres connection string and a long random admin token.
+using the internal Postgres connection string and different long random admin and
+recorder tokens. Never ship the admin token in the iOS app.
 4. Configure the admin static site to serve `admin/config.js` containing the
    public API URL, for example:
 
@@ -73,8 +77,17 @@ continuous deployment.
 Run migrations as part of API startup; `sqlx::migrate!` currently applies the
 checked-in migrations when the Postgres repository connects. Before production,
 take a database backup, configure TLS/custom domains, add error/latency
-monitoring, and verify a restore procedure. Offline pack publishing remains an
-explicit admin action after guidebook edits.
+monitoring, and verify a restore procedure. Use `scripts/db-backup.sh` for a
+custom-format backup and `scripts/db-restore.sh` only with the explicit
+`CONFIRM_RESTORE=YES` guard. Offline pack publishing remains an explicit admin
+action after guidebook edits.
+
+## Monitoring
+
+Render should use `/health` as the web service health check. GitHub's scheduled
+`monitor.yml` provides a second, external check when the repository variable
+`MONITORING_ENABLED=true` and the secret `CLIMBAR_HEALTHCHECK_URL` points to the
+public health URL. A skipped monitoring job means monitoring has not been enabled.
 
 ## Alternatives
 
