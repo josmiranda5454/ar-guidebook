@@ -1,6 +1,6 @@
 use crate::models::{
-    Area, CalibrationReviewStatus, MediaAsset, NearbyRoute, OfflinePack, Route, RouteArOverlay,
-    RouteCalibrationCapture, Wall,
+    ArchivedGuideEntry, Area, CalibrationReviewStatus, MediaAsset, NearbyRoute, OfflinePack, Route,
+    RouteArOverlay, RouteCalibrationCapture, Wall,
 };
 use async_trait::async_trait;
 use std::{error::Error, fmt};
@@ -53,6 +53,8 @@ pub trait GuideRepository: Send + Sync {
     async fn archive_area(&self, area_id: Uuid) -> RepositoryResult<bool>;
     async fn archive_wall(&self, wall_id: Uuid) -> RepositoryResult<bool>;
     async fn archive_route(&self, route_id: Uuid) -> RepositoryResult<bool>;
+    async fn archived_entities(&self) -> RepositoryResult<Vec<ArchivedGuideEntry>>;
+    async fn restore_entity(&self, entity_id: Uuid) -> RepositoryResult<bool>;
     async fn create_route(&self, route: Route) -> RepositoryResult<Option<Route>>;
     async fn create_ar_overlay(
         &self,

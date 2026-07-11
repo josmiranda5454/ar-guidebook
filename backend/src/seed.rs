@@ -1,7 +1,8 @@
 use crate::models::{
-    ArAnchorStrategy, Area, CalibrationReviewStatus, GeoPoint, GradeSystem, MediaAsset, MediaKind,
-    NearbyRoute, OfflinePack, OverlayConfidence, Route, RouteArOverlay, RouteCalibrationCapture,
-    RouteTrace, RouteType, TraceCoordinateSpace, TracePoint, Wall, WallPlaneEstimate,
+    ArAnchorStrategy, ArchivedGuideEntry, Area, CalibrationReviewStatus, GeoPoint, GradeSystem,
+    MediaAsset, MediaKind, NearbyRoute, OfflinePack, OverlayConfidence, Route, RouteArOverlay,
+    RouteCalibrationCapture, RouteTrace, RouteType, TraceCoordinateSpace, TracePoint, Wall,
+    WallPlaneEstimate,
 };
 use crate::repository::{GuideRepository, RepositoryResult};
 use async_trait::async_trait;
@@ -433,6 +434,51 @@ impl GuideRepository for SeedStore {
                 .insert(route_id);
         }
         Ok(exists)
+    }
+
+    async fn archived_entities(&self) -> RepositoryResult<Vec<ArchivedGuideEntry>> {
+        let archived = self
+            .archived_entities
+            .lock()
+            .expect("archive store lock")
+            .clone();
+        let mut entries = Vec::new();
+        for area in self.areas_seed() {
+            if archived.contains(&area.id) {
+                entries.push(ArchivedGuideEntry {
+                    id: area.id,
+                    entity_type: "area".into(),
+                    name: area.name.clone(),
+                });
+            }
+            for wall in area.walls {
+                if archived.contains(&wall.id) {
+                    entries.push(ArchivedGuideEntry {
+                        id: wall.id,
+                        entity_type: "wall".into(),
+                        name: wall.name.clone(),
+                    });
+                }
+                for route in wall.routes {
+                    if archived.contains(&route.id) {
+                        entries.push(ArchivedGuideEntry {
+                            id: route.id,
+                            entity_type: "route".into(),
+                            name: route.name,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(entries)
+    }
+
+    async fn restore_entity(&self, entity_id: Uuid) -> RepositoryResult<bool> {
+        Ok(self
+            .archived_entities
+            .lock()
+            .expect("archive store lock")
+            .remove(&entity_id))
     }
 
     async fn create_route(&self, mut route: Route) -> RepositoryResult<Option<Route>> {

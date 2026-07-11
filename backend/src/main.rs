@@ -14,8 +14,8 @@ use axum::{
 };
 use db::PgGuideRepository;
 use models::{
-    Area, CalibrationReviewStatus, MediaAsset, NearbyRoute, OfflinePack, Route, RouteArOverlay,
-    RouteCalibrationCapture, Wall,
+    ArchivedGuideEntry, Area, CalibrationReviewStatus, MediaAsset, NearbyRoute, OfflinePack, Route,
+    RouteArOverlay, RouteCalibrationCapture, Wall,
 };
 use repository::{GuideRepository, RepositoryError};
 use seed::SeedStore;
@@ -98,6 +98,11 @@ async fn main() {
         .route(
             "/api/v1/admin/ar-overlays/:overlay_id/apply-calibration/:capture_id",
             axum::routing::post(apply_calibration_capture),
+        )
+        .route("/api/v1/admin/archived", get(list_archived))
+        .route(
+            "/api/v1/admin/archived/:entity_id/restore",
+            post(restore_entity),
         )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
@@ -442,6 +447,37 @@ async fn archive_route(
                 .await
                 .map_err(status_from_repository_error)?;
         }
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn list_archived(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ArchivedGuideEntry>>, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    state
+        .repository
+        .archived_entities()
+        .await
+        .map(Json)
+        .map_err(status_from_repository_error)
+}
+
+async fn restore_entity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(entity_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    if state
+        .repository
+        .restore_entity(entity_id)
+        .await
+        .map_err(status_from_repository_error)?
+    {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)

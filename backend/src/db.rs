@@ -1,8 +1,9 @@
 use crate::{
     models::{
-        ArAnchorStrategy, Area, CalibrationReviewStatus, GeoPoint, GradeSystem, MediaAsset,
-        MediaKind, NearbyRoute, OfflinePack, OverlayConfidence, Route, RouteArAlignment,
-        RouteArOverlay, RouteCalibrationCapture, RouteTrace, RouteType, Wall, WallPlaneEstimate,
+        ArAnchorStrategy, ArchivedGuideEntry, Area, CalibrationReviewStatus, GeoPoint, GradeSystem,
+        MediaAsset, MediaKind, NearbyRoute, OfflinePack, OverlayConfidence, Route,
+        RouteArAlignment, RouteArOverlay, RouteCalibrationCapture, RouteTrace, RouteType, Wall,
+        WallPlaneEstimate,
     },
     repository::{GuideRepository, RepositoryError, RepositoryResult},
 };
@@ -971,6 +972,28 @@ impl GuideRepository for PgGuideRepository {
     async fn archive_route(&self, route_id: Uuid) -> RepositoryResult<bool> {
         let result = sqlx::query("INSERT INTO archived_entities (entity_id, entity_type) VALUES ($1, 'route') ON CONFLICT (entity_id) DO NOTHING")
             .bind(route_id).execute(&self.pool).await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn archived_entities(&self) -> RepositoryResult<Vec<ArchivedGuideEntry>> {
+        let rows = sqlx::query("SELECT ae.entity_id, ae.entity_type, COALESCE(a.name, w.name, r.name) AS name FROM archived_entities ae LEFT JOIN areas a ON ae.entity_id = a.id LEFT JOIN walls w ON ae.entity_id = w.id LEFT JOIN routes r ON ae.entity_id = r.id ORDER BY name")
+            .fetch_all(&self.pool).await?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(ArchivedGuideEntry {
+                    id: row.try_get("entity_id")?,
+                    entity_type: row.try_get("entity_type")?,
+                    name: row.try_get("name")?,
+                })
+            })
+            .collect()
+    }
+
+    async fn restore_entity(&self, entity_id: Uuid) -> RepositoryResult<bool> {
+        let result = sqlx::query("DELETE FROM archived_entities WHERE entity_id = $1")
+            .bind(entity_id)
+            .execute(&self.pool)
+            .await?;
         Ok(result.rows_affected() > 0)
     }
 

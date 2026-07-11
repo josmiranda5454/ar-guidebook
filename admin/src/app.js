@@ -8,6 +8,7 @@ import {
   createRoute,
   createWall,
   listAreas,
+  listArchived,
   login,
   listCalibrationCaptures,
   publishAreaPack,
@@ -16,6 +17,7 @@ import {
   updateMedia,
   updateArea,
   updateWall,
+  restoreArchived,
   updateRoute,
 } from "./api.js";
 import { draftArea, draftOverlay, draftRoute, draftWall } from "./drafts.js";
@@ -32,6 +34,7 @@ const state = {
   selectedRouteId: null,
   captures: [],
   selectedCaptureId: null,
+  archived: [],
   authenticated: Boolean(globalThis.localStorage?.getItem("climbar-admin-token")),
 };
 
@@ -54,6 +57,8 @@ const elements = {
   calibrationView: document.querySelector("#calibration-view"),
   routeCount: document.querySelector("#route-count"),
   routeList: document.querySelector("#route-list"),
+  archivedCount: document.querySelector("#archived-count"),
+  archivedList: document.querySelector("#archived-list"),
   routeEditor: document.querySelector("#route-editor"),
   captureCount: document.querySelector("#capture-count"),
   captureList: document.querySelector("#capture-list"),
@@ -126,6 +131,12 @@ async function loadGuidebook() {
 
   try {
     state.areas = await listAreas(state.apiBaseUrl);
+    if (state.authenticated) {
+      try { state.archived = await listArchived(state.apiBaseUrl); }
+      catch { state.archived = []; state.authenticated = false; }
+    } else {
+      state.archived = [];
+    }
     state.routes = flattenRoutes(state.areas);
 
     if (!state.routes.some(({ route }) => route.id === state.selectedRouteId)) {
@@ -198,6 +209,7 @@ function renderActiveView() {
 function renderGuidebook() {
   renderActiveView();
   renderRouteList();
+  renderArchivedList();
   const entry = selectedRouteEntry();
   if (entry) {
     renderRouteEditor(entry);
@@ -205,6 +217,25 @@ function renderGuidebook() {
     renderWallEditor(selectedWall());
   } else {
     renderAreaEditor(selectedArea());
+  }
+}
+
+function renderArchivedList() {
+  elements.archivedCount.textContent = String(state.archived.length);
+  elements.archivedList.replaceChildren();
+  if (state.archived.length === 0) {
+    const empty = document.createElement("p"); empty.className = "empty-state"; empty.textContent = "Nothing archived."; elements.archivedList.append(empty); return;
+  }
+  for (const entry of state.archived) {
+    const row = document.createElement("div"); row.className = "archived-row";
+    row.innerHTML = `<div><strong>${escapeHtml(entry.name)}</strong><span>${escapeHtml(entry.entity_type)}</span></div><button type="button">Restore</button>`;
+    row.querySelector("button").addEventListener("click", async () => {
+      setBusy(true, `Restoring ${entry.entity_type}...`);
+      try { await restoreArchived(state.apiBaseUrl, entry.id); await loadGuidebook(); setStatus(`${entry.entity_type} restored.`); }
+      catch (error) { setStatus(`Unable to restore: ${error.message}`); }
+      finally { setBusy(false); }
+    });
+    elements.archivedList.append(row);
   }
 }
 

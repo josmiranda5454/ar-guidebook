@@ -65,6 +65,13 @@ pub struct NearbyRoute {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ArchivedGuideEntry {
+    pub id: Uuid,
+    pub entity_type: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GradeSystem {
     YosemiteDecimal,

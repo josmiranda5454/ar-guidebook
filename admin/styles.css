@@ -236,6 +236,20 @@ h2 {
   overflow: auto;
 }
 
+.archived-heading { margin-top: 12px; }
+
+.archived-row {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+.archived-row div { display: grid; gap: 3px; }
+.archived-row span { color: var(--muted); font-size: .8rem; text-transform: capitalize; }
+
 .capture-row {
   background: white;
   border: 0;

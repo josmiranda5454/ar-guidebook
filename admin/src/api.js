@@ -46,6 +46,14 @@ export function areasUrl(apiBaseUrl) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/areas`;
 }
 
+export function archivedUrl(apiBaseUrl) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/archived`;
+}
+
+export function restoreArchivedUrl(apiBaseUrl, entityId) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/archived/${entityId}/restore`;
+}
+
 export function createAreaUrl(apiBaseUrl) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/areas`;
 }
@@ -125,6 +133,16 @@ export async function listCalibrationCaptures(apiBaseUrl, filters = {}, fetchImp
 export async function listAreas(apiBaseUrl, fetchImpl = fetch) {
   const response = await fetchImpl(areasUrl(apiBaseUrl));
   return parseJsonResponse(response);
+}
+
+export async function listArchived(apiBaseUrl, fetchImpl = fetch) {
+  const response = await fetchImpl(archivedUrl(apiBaseUrl), { headers: adminAuthHeaders() });
+  return parseJsonResponse(response);
+}
+
+export async function restoreArchived(apiBaseUrl, entityId, fetchImpl = fetch) {
+  const response = await fetchImpl(restoreArchivedUrl(apiBaseUrl, entityId), { method: "POST", headers: adminAuthHeaders() });
+  if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
 }
 
 export async function createArea(apiBaseUrl, area, fetchImpl = fetch) {
