@@ -1,6 +1,7 @@
 import ARKit
 import RealityKit
 import SwiftUI
+import UIKit
 
 struct RouteARView: View {
     let route: Route
@@ -39,7 +40,7 @@ struct RouteARView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            RouteARSceneView(overlay: overlay, alignment: alignment)
+            RouteARSceneView(routeName: route.name, overlay: overlay, alignment: alignment)
                 .ignoresSafeArea()
 
             RouteARControlPanel(
@@ -481,6 +482,7 @@ private struct RouteAlignmentControls: View {
 }
 
 private struct RouteARSceneView: UIViewRepresentable {
+    let routeName: String
     let overlay: RouteAROverlay
     let alignment: RouteARAlignment
 
@@ -532,7 +534,37 @@ private struct RouteARSceneView: UIViewRepresentable {
             anchor.addChild(holdMarker)
         }
 
+        addRouteNameLabel(routeName, near: points[0], to: anchor)
+
         arView.scene.addAnchor(anchor)
+    }
+
+    private func addRouteNameLabel(_ name: String, near point: SIMD3<Float>, to anchor: AnchorEntity) {
+        let labelPosition = point + SIMD3<Float>(0, 0.18, 0)
+        let connector = RouteTraceSegmentEntity.make(
+            start: point,
+            end: labelPosition,
+            material: UnlitMaterial(color: .systemYellow)
+        )
+        anchor.addChild(connector)
+
+        let textMesh = MeshResource.generateText(
+            name,
+            extrusionDepth: 0.004,
+            font: .systemFont(ofSize: 0.12, weight: .bold),
+            containerFrame: .zero,
+            alignment: .center,
+            lineBreakMode: .byTruncatingTail
+        )
+        let label = ModelEntity(
+            mesh: textMesh,
+            materials: [UnlitMaterial(color: .white)]
+        )
+        label.position = labelPosition
+        if #available(iOS 18.0, *) {
+            label.components.set(BillboardComponent())
+        }
+        anchor.addChild(label)
     }
 }
 
