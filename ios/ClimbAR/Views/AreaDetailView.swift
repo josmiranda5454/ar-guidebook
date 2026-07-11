@@ -19,13 +19,15 @@ final class AreaDetailViewModel: ObservableObject {
 
     func loadCachedPack() async {
         isDownloaded = await packStore.isDownloaded(areaId: area.id)
-        guard let pack = try? await packStore.load(areaId: area.id),
-              let cachedArea = pack.areas.first else {
+        do {
+            area = try await api.area(id: area.id)
             return
+        } catch {
+            guard let pack = try? await packStore.load(areaId: area.id),
+                  let cachedArea = pack.areas.first else { return }
+            downloadedVersion = pack.version
+            area = cachedArea
         }
-
-        downloadedVersion = pack.version
-        area = cachedArea
     }
 
     func downloadArea() async {

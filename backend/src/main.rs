@@ -366,6 +366,11 @@ async fn archive_area(
         .await
         .map_err(status_from_repository_error)?
     {
+        state
+            .repository
+            .publish_offline_pack(area_id)
+            .await
+            .map_err(status_from_repository_error)?;
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -378,12 +383,25 @@ async fn archive_wall(
     Path(wall_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     auth::authorize(&headers, &state)?;
+    let area_id = state
+        .repository
+        .wall(wall_id)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(|wall| wall.area_id);
     if state
         .repository
         .archive_wall(wall_id)
         .await
         .map_err(status_from_repository_error)?
     {
+        if let Some(area_id) = area_id {
+            state
+                .repository
+                .publish_offline_pack(area_id)
+                .await
+                .map_err(status_from_repository_error)?;
+        }
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -396,12 +414,34 @@ async fn archive_route(
     Path(route_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     auth::authorize(&headers, &state)?;
+    let area_id = if let Some(route) = state
+        .repository
+        .route(route_id)
+        .await
+        .map_err(status_from_repository_error)?
+    {
+        state
+            .repository
+            .wall(route.wall_id)
+            .await
+            .map_err(status_from_repository_error)?
+            .map(|wall| wall.area_id)
+    } else {
+        None
+    };
     if state
         .repository
         .archive_route(route_id)
         .await
         .map_err(status_from_repository_error)?
     {
+        if let Some(area_id) = area_id {
+            state
+                .repository
+                .publish_offline_pack(area_id)
+                .await
+                .map_err(status_from_repository_error)?;
+        }
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)

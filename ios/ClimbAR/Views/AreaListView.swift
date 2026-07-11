@@ -30,10 +30,9 @@ final class AreaListViewModel: ObservableObject {
     }
 
     private func mergedAreas(remoteAreas: [Area], cachedAreas: [Area]) -> [Area] {
-        let cachedById = Dictionary(uniqueKeysWithValues: cachedAreas.map { ($0.id, $0) })
-        return remoteAreas.map { area in
-            cachedById[area.id] ?? area
-        }
+        let remoteIds = Set(remoteAreas.map(\.id))
+        let cachedOnly = cachedAreas.filter { !remoteIds.contains($0.id) }
+        return remoteAreas + cachedOnly
     }
 }
 
