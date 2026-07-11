@@ -86,6 +86,7 @@ async fn main() {
             put(update_ar_overlay),
         )
         .route("/api/v1/admin/media/:media_id", put(update_media))
+        .route("/api/v1/admin/routes/:route_id/media", post(create_media))
         .route(
             "/api/v1/admin/ar-calibration-captures",
             get(list_calibration_captures).post(create_calibration_capture),
@@ -482,6 +483,22 @@ async fn update_media(
         .await
         .map_err(status_from_repository_error)?
         .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn create_media(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(route_id): Path<Uuid>,
+    Json(media): Json<MediaAsset>,
+) -> Result<(StatusCode, Json<MediaAsset>), StatusCode> {
+    auth::authorize(&headers, &state)?;
+    state
+        .repository
+        .create_media(route_id, media)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(|media| (StatusCode::CREATED, Json(media)))
         .ok_or(StatusCode::NOT_FOUND)
 }
 

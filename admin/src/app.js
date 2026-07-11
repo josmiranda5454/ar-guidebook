@@ -3,6 +3,7 @@ import {
   applyCalibrationCapture,
   archiveEntity,
   createArea,
+  createMedia,
   createOverlay,
   createRoute,
   createWall,
@@ -320,6 +321,7 @@ function renderRouteEditor(entry) {
         <button type="submit">Save Route</button>
         ${overlay ? '<button id="save-overlay-button" class="secondary" type="button">Save Overlay</button>' : ""}
         ${media ? '<button id="save-media-button" class="secondary" type="button">Save Media</button>' : ""}
+        <button id="add-media-button" class="secondary" type="button">Add Media</button>
         <button id="archive-route-button" class="danger" type="button">Archive Route</button>
       </div>
     </form>
@@ -337,9 +339,27 @@ function renderRouteEditor(entry) {
   document.querySelector("#save-media-button")?.addEventListener("click", async () => {
     await saveMedia(media);
   });
+  document.querySelector("#add-media-button")?.addEventListener("click", () => openMediaCreateForm(route));
   document.querySelector("#archive-route-button")?.addEventListener("click", async () => {
     await archiveSelected("route", route.id);
   });
+}
+
+function openMediaCreateForm(route) {
+  elements.routeEditor.innerHTML = `<form id="media-create-form" class="editor-form"><section class="form-section"><h2>Add Media Asset</h2><p class="muted">Store a photo, topo, or video reference for offline publishing.</p><div class="form-grid">${selectField("new-media-kind", "Kind", ["photo", "topo", "video"], "photo")}${inputField("new-media-title", "Title", "")}${inputField("new-media-url", "Source URL", "", "url")}${inputField("new-media-offline-path", "Offline path", "")}</div></section><div class="actions"><button type="submit">Add Media</button><button id="cancel-media-button" class="secondary" type="button">Cancel</button></div></form>`;
+  document.querySelector("#media-create-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const title = value("new-media-title"); const url = value("new-media-url");
+    if (!title || !url) { setStatus("Media title and source URL are required."); return; }
+    setBusy(true, "Adding media...");
+    try {
+      await createMedia(state.apiBaseUrl, route.id, { id: crypto.randomUUID(), kind: value("new-media-kind"), title, url, offline_path: optionalText("new-media-offline-path") });
+      await loadGuidebook();
+      setStatus("Media asset added.");
+    } catch (error) { setStatus(`Unable to add media: ${error.message}`); }
+    finally { setBusy(false); }
+  });
+  document.querySelector("#cancel-media-button").addEventListener("click", () => renderGuidebook());
 }
 
 function openCreateForm(kind) {

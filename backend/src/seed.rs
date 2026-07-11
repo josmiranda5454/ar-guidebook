@@ -539,6 +539,25 @@ impl GuideRepository for SeedStore {
         Ok(None)
     }
 
+    async fn create_media(
+        &self,
+        route_id: Uuid,
+        media: MediaAsset,
+    ) -> RepositoryResult<Option<MediaAsset>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+        for route in areas
+            .iter_mut()
+            .flat_map(|area| area.walls.iter_mut())
+            .flat_map(|wall| wall.routes.iter_mut())
+        {
+            if route.id == route_id {
+                route.media.push(media.clone());
+                return Ok(Some(media));
+            }
+        }
+        Ok(None)
+    }
+
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,

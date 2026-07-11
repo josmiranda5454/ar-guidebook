@@ -8,6 +8,8 @@ import {
   areasUrl,
   calibrationCaptureListUrl,
   createArea,
+  createMedia,
+  createMediaUrl,
   createAreaUrl,
   createOverlay,
   createOverlayUrl,
@@ -96,6 +98,15 @@ test("builds authentication and publish endpoint URLs", () => {
   assert.equal(updateAreaUrl("http://localhost:8080/api/v1", "area-1"), "http://localhost:8080/api/v1/admin/areas/area-1");
   assert.equal(updateWallUrl("http://localhost:8080/api/v1", "wall-1"), "http://localhost:8080/api/v1/admin/walls/wall-1");
   assert.equal(archiveEntityUrl("http://localhost:8080/api/v1", "area", "area-1"), "http://localhost:8080/api/v1/admin/areas/area-1/archive");
+  assert.equal(createMediaUrl("http://localhost:8080/api/v1", "route-1"), "http://localhost:8080/api/v1/admin/routes/route-1/media");
+});
+
+test("media creation posts an asset to its route", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => { calls.push({ url, options }); return Response.json({ id: "media-1" }); };
+  await createMedia("http://localhost:8080/api/v1", "route-1", { id: "media-1", kind: "photo" }, fetchImpl);
+  assert.equal(calls[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { id: "media-1", kind: "photo" });
 });
 
 test("archive requests post to the matching guidebook entity endpoint", async () => {

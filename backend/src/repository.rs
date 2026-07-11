@@ -69,6 +69,11 @@ pub trait GuideRepository: Send + Sync {
         media_id: Uuid,
         media: MediaAsset,
     ) -> RepositoryResult<Option<MediaAsset>>;
+    async fn create_media(
+        &self,
+        route_id: Uuid,
+        media: MediaAsset,
+    ) -> RepositoryResult<Option<MediaAsset>>;
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,

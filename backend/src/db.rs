@@ -1064,6 +1064,22 @@ impl GuideRepository for PgGuideRepository {
         .transpose()
     }
 
+    async fn create_media(
+        &self,
+        route_id: Uuid,
+        media: MediaAsset,
+    ) -> RepositoryResult<Option<MediaAsset>> {
+        if self.route(route_id).await?.is_none() {
+            return Ok(None);
+        }
+        self.upsert_media(route_id, &media).await?;
+        Ok(self
+            .load_media(route_id)
+            .await?
+            .into_iter()
+            .find(|item| item.id == media.id))
+    }
+
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,
