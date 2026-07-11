@@ -58,7 +58,10 @@ struct RouteARView: View {
     @State private var isPlacingRouteStart = false
     @State private var anchorMessage: String?
     @State private var trackingStatus: RouteARTrackingStatus = .initializing
+    @State private var hasRelocalizedSavedWorldMap = true
+    @State private var hasSeenRelocalizingState = false
     @StateObject private var locationService = LocationService()
+    private let initialSavedWorldMapLoaded: Bool
 
     init(route: Route, overlay: RouteAROverlay) {
         self.route = route
@@ -79,6 +82,9 @@ struct RouteARView: View {
         )
         _hasRecorderSession = State(initialValue: AppConfiguration.recorderSessionToken != nil)
         let savedRouteStart = RouteARPlacementStore.load(routeId: route.id, overlayId: overlay.id)
+        let savedWorldMapLoaded = savedRouteStart != nil
+            && RouteARWorldMapStore.load(routeId: route.id, overlayId: overlay.id) != nil
+        initialSavedWorldMapLoaded = savedWorldMapLoaded
         _routeStartWorldPosition = State(initialValue: savedRouteStart)
         _anchorMessage = State(
             initialValue: savedRouteStart == nil
@@ -86,10 +92,12 @@ struct RouteARView: View {
                 : "Saved wall anchor loaded; move slowly to relocalize."
         )
         _trackingStatus = State(
-            initialValue: RouteARWorldMapStore.load(routeId: route.id, overlayId: overlay.id) == nil
+            initialValue: !savedWorldMapLoaded
                 ? .initializing
                 : .relocalizing
         )
+        _hasRelocalizedSavedWorldMap = State(initialValue: !savedWorldMapLoaded)
+        _hasSeenRelocalizingState = State(initialValue: false)
     }
 
     var body: some View {
@@ -105,7 +113,24 @@ struct RouteARView: View {
                 isTraceVisible: isTraceVisible,
                 onRouteStartPlaced: placeRouteStart,
                 onPlacementRejected: { message in anchorMessage = message },
-                onTrackingStatusChanged: { trackingStatus = $0 },
+                onTrackingStatusChanged: { status in
+                    switch status {
+                    case .relocalizing:
+                        trackingStatus = status
+                        hasSeenRelocalizingState = true
+                        hasRelocalizedSavedWorldMap = false
+                    case .ready where initialSavedWorldMapLoaded && !hasSeenRelocalizingState:
+                        // A fresh AR session can become "normal" without matching
+                        // the saved map. Keep the persisted coordinates hidden until
+                        // ARKit has reported its relocalization phase.
+                        trackingStatus = .relocalizing
+                    case .ready:
+                        trackingStatus = status
+                        hasRelocalizedSavedWorldMap = true
+                    default:
+                        trackingStatus = status
+                    }
+                },
                 onWorldMapSaved: { didSave in
                     if didSave, let routeStartWorldPosition {
                         RouteARPlacementStore.save(
@@ -223,7 +248,7 @@ struct RouteARView: View {
     }
 
     private var isTraceVisible: Bool {
-        isAtWall && trackingStatus == .ready
+        isAtWall && trackingStatus == .ready && hasRelocalizedSavedWorldMap
     }
 
     private var locationStatus: String {
@@ -251,12 +276,16 @@ struct RouteARView: View {
 
     private func placeRouteStart(at worldPosition: SIMD3<Float>) {
         routeStartWorldPosition = worldPosition
+        hasSeenRelocalizingState = true
+        hasRelocalizedSavedWorldMap = true
         isPlacingRouteStart = false
         anchorMessage = "Route start anchored for this session. Saving the wall reference..."
     }
 
     private func clearRouteStartPlacement() {
         routeStartWorldPosition = nil
+        hasSeenRelocalizingState = true
+        hasRelocalizedSavedWorldMap = true
         isPlacingRouteStart = false
         anchorMessage = "Saved wall reference removed."
         RouteARPlacementStore.delete(routeId: route.id, overlayId: overlay.id)
