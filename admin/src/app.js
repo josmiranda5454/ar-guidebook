@@ -342,6 +342,7 @@ function renderRouteEditor(entry) {
           ${textareaField("location-notes", "Location notes", route.location_notes)}
           ${textareaField("protection-notes", "Protection notes", route.protection_notes ?? "")}
           ${textareaField("safety-notes", "Safety notes", route.safety_notes ?? "")}
+          ${geoFields(route.location)}
         </div>
       </section>
 
@@ -759,6 +760,11 @@ function readRouteForm(route) {
     location_notes: value("location-notes"),
     protection_notes: optionalText("protection-notes"),
     safety_notes: optionalText("safety-notes"),
+    location: {
+      latitude: requiredNumber("entity-latitude"),
+      longitude: requiredNumber("entity-longitude"),
+      elevation_meters: optionalNumber("entity-elevation"),
+    },
   };
 }
 
