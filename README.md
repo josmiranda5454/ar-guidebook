@@ -77,3 +77,8 @@ Then set the Xcode build setting `CLIMBAR_API_BASE_URL` to your Mac's LAN API
 URL, for example `http://192.168.1.42:8080/api/v1`. The iPhone and Mac must be
 on the same network, and macOS may ask you to allow incoming connections for the
 backend process.
+
+To upload calibration snapshots from the iOS app during development, set the
+Xcode build setting `CLIMBAR_ADMIN_TOKEN` to the backend's
+`CLIMBAR_ADMIN_TOKEN` value. Browsing and AR rendering do not require this
+token; only calibration uploads do.

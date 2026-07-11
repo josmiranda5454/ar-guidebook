@@ -6,6 +6,8 @@ final class RouteSearchViewModel: ObservableObject {
     @Published var routes: [Route] = []
     @Published var isSearching = false
     @Published var statusMessage: String?
+    @Published var nearbyRoutes: [NearbyRoute] = []
+    @Published var isLoadingNearby = false
 
     private let api: ClimbARAPI
     private let packStore: OfflinePackStore
@@ -60,6 +62,24 @@ final class RouteSearchViewModel: ObservableObject {
         }
     }
 
+    func loadNearby(location: CLLocation?) async {
+        guard let location else {
+            statusMessage = "Allow location access to find nearby routes."
+            return
+        }
+        isLoadingNearby = true
+        defer { isLoadingNearby = false }
+        do {
+            nearbyRoutes = try await api.nearbyRoutes(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            ).sorted { $0.distanceMeters < $1.distanceMeters }
+            statusMessage = nearbyRoutes.isEmpty ? "No routes were found nearby." : nil
+        } catch {
+            statusMessage = "Could not load nearby routes."
+        }
+    }
+
     private func searchDownloadedRoutes(query: String) async -> [Route] {
         let normalizedQuery = query.lowercased()
         let packs = (try? await packStore.loadAll()) ?? []
@@ -81,6 +101,7 @@ final class RouteSearchViewModel: ObservableObject {
 
 struct RouteSearchView: View {
     @StateObject var viewModel: RouteSearchViewModel
+    @StateObject private var locationService = LocationService()
 
     var body: some View {
         NavigationStack {
@@ -107,6 +128,22 @@ struct RouteSearchView: View {
                         }
                     }
                 }
+
+                if !viewModel.nearbyRoutes.isEmpty {
+                    Section("Nearby Routes") {
+                        ForEach(viewModel.nearbyRoutes) { nearby in
+                            NavigationLink {
+                                RouteDetailView(route: nearby.route)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(nearby.route.name).font(.headline)
+                                    Text("\(nearby.route.grade) • \(formattedDistance(nearby.distanceMeters))")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("Search")
             .searchable(text: $viewModel.query, prompt: "Route name, grade, or notes")
@@ -118,6 +155,14 @@ struct RouteSearchView: View {
                     Task { await viewModel.search() }
                 }
                 .disabled(viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button {
+                    locationService.requestLocation()
+                    Task { await viewModel.loadNearby(location: locationService.userLocation) }
+                } label: {
+                    Label("Nearby", systemImage: "location.fill")
+                }
+                .disabled(viewModel.isLoadingNearby)
             }
             .refreshable {
                 await viewModel.refresh()
@@ -126,5 +171,13 @@ struct RouteSearchView: View {
         .task {
             await viewModel.loadDownloadedRoutes()
         }
+        .onChange(of: locationService.userLocation) { _, location in
+            guard location != nil else { return }
+            Task { await viewModel.loadNearby(location: location) }
+        }
+    }
+
+    private func formattedDistance(_ meters: Double) -> String {
+        meters >= 1000 ? String(format: "%.1f km", meters / 1000) : "\(Int(meters.rounded())) m"
     }
 }

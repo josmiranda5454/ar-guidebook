@@ -282,6 +282,7 @@ impl PgGuideRepository {
                        elevation_meters
                 FROM areas
                 WHERE id = $1
+                  AND NOT EXISTS (SELECT 1 FROM archived_entities WHERE entity_id = areas.id)
                 ORDER BY name
                 "#,
                 )
@@ -297,6 +298,7 @@ impl PgGuideRepository {
                        ST_X(location::geometry) AS longitude,
                        elevation_meters
                 FROM areas
+                WHERE NOT EXISTS (SELECT 1 FROM archived_entities WHERE entity_id = areas.id)
                 ORDER BY name
                 "#,
                 )
@@ -334,6 +336,7 @@ impl PgGuideRepository {
                    elevation_meters
             FROM walls
             WHERE area_id = $1
+              AND NOT EXISTS (SELECT 1 FROM archived_entities WHERE entity_id = walls.id)
             ORDER BY name
             "#,
         )
@@ -371,6 +374,7 @@ impl PgGuideRepository {
                    elevation_meters
             FROM walls
             WHERE id = $1
+              AND NOT EXISTS (SELECT 1 FROM archived_entities WHERE entity_id = walls.id)
             "#,
         )
         .bind(wall_id)
@@ -405,6 +409,7 @@ impl PgGuideRepository {
                    elevation_meters
             FROM routes
             WHERE wall_id = $1
+              AND NOT EXISTS (SELECT 1 FROM archived_entities WHERE entity_id = routes.id)
             ORDER BY name
             "#,
         )
@@ -460,6 +465,7 @@ impl PgGuideRepository {
                    elevation_meters
             FROM routes
             WHERE id = $1
+              AND NOT EXISTS (SELECT 1 FROM archived_entities WHERE entity_id = routes.id)
             "#,
         )
         .bind(route_id)
@@ -948,6 +954,24 @@ impl GuideRepository for PgGuideRepository {
         wall.routes.clear();
         self.upsert_wall(&wall).await?;
         self.wall(wall_id).await
+    }
+
+    async fn archive_area(&self, area_id: Uuid) -> RepositoryResult<bool> {
+        let result = sqlx::query("INSERT INTO archived_entities (entity_id, entity_type) VALUES ($1, 'area') ON CONFLICT (entity_id) DO NOTHING")
+            .bind(area_id).execute(&self.pool).await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn archive_wall(&self, wall_id: Uuid) -> RepositoryResult<bool> {
+        let result = sqlx::query("INSERT INTO archived_entities (entity_id, entity_type) VALUES ($1, 'wall') ON CONFLICT (entity_id) DO NOTHING")
+            .bind(wall_id).execute(&self.pool).await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn archive_route(&self, route_id: Uuid) -> RepositoryResult<bool> {
+        let result = sqlx::query("INSERT INTO archived_entities (entity_id, entity_type) VALUES ($1, 'route') ON CONFLICT (entity_id) DO NOTHING")
+            .bind(route_id).execute(&self.pool).await?;
+        Ok(result.rows_affected() > 0)
     }
 
     async fn create_route(&self, mut route: Route) -> RepositoryResult<Option<Route>> {

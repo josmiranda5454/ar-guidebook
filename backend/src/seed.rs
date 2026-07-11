@@ -6,13 +6,14 @@ use crate::models::{
 use crate::repository::{GuideRepository, RepositoryResult};
 use async_trait::async_trait;
 use chrono::Utc;
-use std::sync::Mutex;
+use std::{collections::HashSet, sync::Mutex};
 use uuid::Uuid;
 
 pub struct SeedStore {
     areas: Mutex<Vec<Area>>,
     calibration_captures: Mutex<Vec<RouteCalibrationCapture>>,
     published_packs: Mutex<Vec<OfflinePack>>,
+    archived_entities: Mutex<HashSet<Uuid>>,
 }
 
 impl SeedStore {
@@ -146,6 +147,7 @@ impl SeedStore {
             areas: Mutex::new(vec![area]),
             calibration_captures: Mutex::new(Vec::new()),
             published_packs: Mutex::new(vec![initial_pack]),
+            archived_entities: Mutex::new(HashSet::new()),
         }
     }
 
@@ -163,6 +165,14 @@ impl SeedStore {
     }
 
     pub fn offline_pack_seed(&self, area_id: Uuid) -> Option<OfflinePack> {
+        if self
+            .archived_entities
+            .lock()
+            .expect("archive store lock")
+            .contains(&area_id)
+        {
+            return None;
+        }
         self.published_packs
             .lock()
             .expect("pack store lock")
@@ -218,23 +228,66 @@ impl SeedStore {
 #[async_trait]
 impl GuideRepository for SeedStore {
     async fn areas(&self) -> RepositoryResult<Vec<Area>> {
-        Ok(self.areas_seed())
+        let archived = self
+            .archived_entities
+            .lock()
+            .expect("archive store lock")
+            .clone();
+        Ok(self
+            .areas_seed()
+            .into_iter()
+            .filter(|area| !archived.contains(&area.id))
+            .map(|mut area| {
+                area.walls.retain(|wall| !archived.contains(&wall.id));
+                for wall in &mut area.walls {
+                    wall.routes.retain(|route| !archived.contains(&route.id));
+                }
+                area
+            })
+            .collect())
     }
 
     async fn area(&self, area_id: Uuid) -> RepositoryResult<Option<Area>> {
-        Ok(self.area_seed(area_id))
+        Ok(self
+            .areas()
+            .await?
+            .into_iter()
+            .find(|area| area.id == area_id))
     }
 
     async fn wall(&self, wall_id: Uuid) -> RepositoryResult<Option<Wall>> {
-        Ok(self.wall_seed(wall_id))
+        Ok(self
+            .areas()
+            .await?
+            .into_iter()
+            .flat_map(|area| area.walls)
+            .find(|wall| wall.id == wall_id))
     }
 
     async fn route(&self, route_id: Uuid) -> RepositoryResult<Option<Route>> {
-        Ok(self.route_seed(route_id))
+        Ok(self
+            .areas()
+            .await?
+            .into_iter()
+            .flat_map(|area| area.walls)
+            .flat_map(|wall| wall.routes)
+            .find(|route| route.id == route_id))
     }
 
     async fn search(&self, query: &str) -> RepositoryResult<Vec<Route>> {
-        Ok(self.search_seed(query))
+        let normalized = query.trim().to_lowercase();
+        Ok(self
+            .areas()
+            .await?
+            .into_iter()
+            .flat_map(|area| area.walls)
+            .flat_map(|wall| wall.routes)
+            .filter(|route| {
+                route.name.to_lowercase().contains(&normalized)
+                    || route.grade.to_lowercase().contains(&normalized)
+                    || route.description.to_lowercase().contains(&normalized)
+            })
+            .collect())
     }
 
     async fn nearby_routes(
@@ -244,7 +297,8 @@ impl GuideRepository for SeedStore {
         radius_meters: f64,
     ) -> RepositoryResult<Vec<NearbyRoute>> {
         Ok(self
-            .areas_seed()
+            .areas()
+            .await?
             .into_iter()
             .flat_map(|area| area.walls)
             .flat_map(|wall| wall.routes)
@@ -268,7 +322,7 @@ impl GuideRepository for SeedStore {
     }
 
     async fn publish_offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
-        let area = match self.area_seed(area_id) {
+        let area = match self.area(area_id).await? {
             Some(area) => area,
             None => return Ok(None),
         };
@@ -345,6 +399,39 @@ impl GuideRepository for SeedStore {
             }
         }
         Ok(None)
+    }
+
+    async fn archive_area(&self, area_id: Uuid) -> RepositoryResult<bool> {
+        let exists = self.area_seed(area_id).is_some();
+        if exists {
+            self.archived_entities
+                .lock()
+                .expect("archive store lock")
+                .insert(area_id);
+        }
+        Ok(exists)
+    }
+
+    async fn archive_wall(&self, wall_id: Uuid) -> RepositoryResult<bool> {
+        let exists = self.wall_seed(wall_id).is_some();
+        if exists {
+            self.archived_entities
+                .lock()
+                .expect("archive store lock")
+                .insert(wall_id);
+        }
+        Ok(exists)
+    }
+
+    async fn archive_route(&self, route_id: Uuid) -> RepositoryResult<bool> {
+        let exists = self.route_seed(route_id).is_some();
+        if exists {
+            self.archived_entities
+                .lock()
+                .expect("archive store lock")
+                .insert(route_id);
+        }
+        Ok(exists)
     }
 
     async fn create_route(&self, mut route: Route) -> RepositoryResult<Option<Route>> {

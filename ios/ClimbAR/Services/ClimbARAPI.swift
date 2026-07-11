@@ -50,6 +50,9 @@ struct ClimbARAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AppConfiguration.adminToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -98,5 +101,12 @@ enum AppConfiguration {
         }
 
         return url
+    }
+
+    static var adminToken: String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "CLIMBAR_ADMIN_TOKEN") as? String,
+              !value.isEmpty,
+              !value.contains("$(") else { return nil }
+        return value
     }
 }

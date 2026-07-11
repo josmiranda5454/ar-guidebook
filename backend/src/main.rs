@@ -75,6 +75,12 @@ async fn main() {
         .route("/api/v1/admin/routes/:route_id", put(update_route))
         .route("/api/v1/admin/areas/:area_id", put(update_area))
         .route("/api/v1/admin/walls/:wall_id", put(update_wall))
+        .route("/api/v1/admin/areas/:area_id/archive", post(archive_area))
+        .route("/api/v1/admin/walls/:wall_id/archive", post(archive_wall))
+        .route(
+            "/api/v1/admin/routes/:route_id/archive",
+            post(archive_route),
+        )
         .route(
             "/api/v1/admin/ar-overlays/:overlay_id",
             put(update_ar_overlay),
@@ -345,6 +351,60 @@ async fn update_wall(
         .map_err(status_from_repository_error)?
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn archive_area(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(area_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    if state
+        .repository
+        .archive_area(area_id)
+        .await
+        .map_err(status_from_repository_error)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn archive_wall(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(wall_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    if state
+        .repository
+        .archive_wall(wall_id)
+        .await
+        .map_err(status_from_repository_error)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn archive_route(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(route_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    if state
+        .repository
+        .archive_route(route_id)
+        .await
+        .map_err(status_from_repository_error)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
 
 async fn create_route(

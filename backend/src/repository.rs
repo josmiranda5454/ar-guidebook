@@ -50,6 +50,9 @@ pub trait GuideRepository: Send + Sync {
     async fn create_wall(&self, wall: Wall) -> RepositoryResult<Option<Wall>>;
     async fn update_area(&self, area_id: Uuid, area: Area) -> RepositoryResult<Option<Area>>;
     async fn update_wall(&self, wall_id: Uuid, wall: Wall) -> RepositoryResult<Option<Wall>>;
+    async fn archive_area(&self, area_id: Uuid) -> RepositoryResult<bool>;
+    async fn archive_wall(&self, wall_id: Uuid) -> RepositoryResult<bool>;
+    async fn archive_route(&self, route_id: Uuid) -> RepositoryResult<bool>;
     async fn create_route(&self, route: Route) -> RepositoryResult<Option<Route>>;
     async fn create_ar_overlay(
         &self,

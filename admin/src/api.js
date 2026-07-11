@@ -62,6 +62,10 @@ export function updateWallUrl(apiBaseUrl, wallId) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/walls/${wallId}`;
 }
 
+export function archiveEntityUrl(apiBaseUrl, kind, id) {
+  return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/${kind}s/${id}/archive`;
+}
+
 export function createRouteUrl(apiBaseUrl) {
   return `${normalizeApiBaseUrl(apiBaseUrl)}/admin/routes`;
 }
@@ -133,6 +137,14 @@ export async function updateArea(apiBaseUrl, area, fetchImpl = fetch) {
 
 export async function updateWall(apiBaseUrl, wall, fetchImpl = fetch) {
   return putJson(updateWallUrl(apiBaseUrl, wall.id), wall, fetchImpl);
+}
+
+export async function archiveEntity(apiBaseUrl, kind, id, fetchImpl = fetch) {
+  const response = await fetchImpl(archiveEntityUrl(apiBaseUrl, kind, id), {
+    method: "POST",
+    headers: adminAuthHeaders(),
+  });
+  if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
 }
 
 export async function createRoute(apiBaseUrl, route, fetchImpl = fetch) {

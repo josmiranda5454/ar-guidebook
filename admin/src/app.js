@@ -1,6 +1,7 @@
 import {
   REVIEW_STATUSES,
   applyCalibrationCapture,
+  archiveEntity,
   createArea,
   createOverlay,
   createRoute,
@@ -82,15 +83,15 @@ elements.refreshButton.addEventListener("click", () => {
 });
 
 elements.createAreaButton.addEventListener("click", () => {
-  createAreaFromPrompt();
+  openCreateForm("area");
 });
 
 elements.createWallButton.addEventListener("click", () => {
-  createWallFromPrompt();
+  openCreateForm("wall");
 });
 
 elements.createRouteButton.addEventListener("click", () => {
-  createRouteFromPrompt();
+  openCreateForm("route");
 });
 
 elements.createOverlayButton.addEventListener("click", () => {
@@ -319,6 +320,7 @@ function renderRouteEditor(entry) {
         <button type="submit">Save Route</button>
         ${overlay ? '<button id="save-overlay-button" class="secondary" type="button">Save Overlay</button>' : ""}
         ${media ? '<button id="save-media-button" class="secondary" type="button">Save Media</button>' : ""}
+        <button id="archive-route-button" class="danger" type="button">Archive Route</button>
       </div>
     </form>
   `;
@@ -334,6 +336,49 @@ function renderRouteEditor(entry) {
   document.querySelector("#save-media-button")?.addEventListener("click", async () => {
     await saveMedia(media);
   });
+  document.querySelector("#archive-route-button")?.addEventListener("click", async () => {
+    await archiveSelected("route", route.id);
+  });
+}
+
+function openCreateForm(kind) {
+  const parent = kind === "wall" ? selectedArea() ?? state.areas[0] : kind === "route" ? selectedWall() ?? firstWall() : null;
+  if ((kind === "wall" || kind === "route") && !parent) {
+    setStatus(`Create a ${kind === "wall" ? "area" : "wall"} first.`);
+    return;
+  }
+
+  const label = kind[0].toUpperCase() + kind.slice(1);
+  elements.routeEditor.innerHTML = `<form id="create-entity-form" class="editor-form"><section class="form-section"><div class="detail-header"><div><h2>New ${label}</h2><p class="muted">${parent ? `Under ${escapeHtml(parent.name)}` : "Add a guidebook area."}</p></div></div><div class="form-grid">${inputField("new-entity-name", "Name", "")} ${textareaField("new-entity-description", "Description", "")} ${kind === "area" ? textareaField("new-entity-notes", "Access notes", "") : kind === "wall" ? textareaField("new-entity-notes", "Approach notes", "") : inputField("new-entity-grade", "Grade", "5.7")}</div></section><div class="actions"><button type="submit">Create ${label}</button><button id="cancel-create-button" class="secondary" type="button">Cancel</button></div></form>`;
+
+  document.querySelector("#create-entity-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = value("new-entity-name");
+    if (!name) { setStatus("Name is required."); return; }
+    setBusy(true, `Creating ${kind}...`);
+    try {
+      let created;
+      if (kind === "area") {
+        created = await createArea(state.apiBaseUrl, { ...draftArea(name), description: value("new-entity-description"), access_notes: optionalText("new-entity-notes") });
+        state.areas = [...state.areas, created];
+        state.selectedAreaId = created.id; state.selectedWallId = null; state.selectedRouteId = null;
+      } else if (kind === "wall") {
+        created = await createWall(state.apiBaseUrl, { ...draftWall(name, parent), description: value("new-entity-description"), approach_notes: optionalText("new-entity-notes") });
+        state.areas = state.areas.map((area) => area.id === parent.id ? { ...area, walls: [...area.walls, created] } : area);
+        state.selectedAreaId = parent.id; state.selectedWallId = created.id; state.selectedRouteId = null;
+      } else {
+        created = await createRoute(state.apiBaseUrl, { ...draftRoute(name, parent), grade: value("new-entity-grade"), description: value("new-entity-description") });
+        state.areas = state.areas.map((area) => ({ ...area, walls: area.walls.map((wall) => wall.id === parent.id ? { ...wall, routes: [...wall.routes, created] } : wall) }));
+        state.selectedAreaId = state.areas.find((area) => area.walls.some((wall) => wall.id === parent.id))?.id ?? null;
+        state.selectedWallId = parent.id; state.selectedRouteId = created.id;
+      }
+      state.routes = flattenRoutes(state.areas);
+      renderGuidebook();
+      setStatus(`${label} "${created.name}" created.`);
+    } catch (error) { setStatus(`Unable to create ${kind}: ${error.message}`); }
+    finally { setBusy(false); }
+  });
+  document.querySelector("#cancel-create-button").addEventListener("click", () => renderGuidebook());
 }
 
 function renderAreaEditor(area) {
@@ -360,7 +405,7 @@ function renderWallEditor(wall) {
 
 function entityForm(kind, entity, title, fields) {
   const childCount = entity.walls?.length ?? entity.routes?.length ?? 0;
-  return `<form id="entity-editor-form" class="editor-form"><section class="form-section"><div class="detail-header"><div><h2>${escapeHtml(title)}</h2><p class="muted">Edit the ${kind} properties defined by the guidebook schema.</p></div><span class="badge">${childCount} ${childCount === 1 ? "child" : "children"}</span></div><div class="form-grid">${fields.join("")}</div></section><div class="actions"><button type="submit">Save ${kind}</button></div></form>`;
+  return `<form id="entity-editor-form" class="editor-form"><section class="form-section"><div class="detail-header"><div><h2>${escapeHtml(title)}</h2><p class="muted">Edit the ${kind} properties defined by the guidebook schema.</p></div><span class="badge">${childCount} ${childCount === 1 ? "child" : "children"}</span></div><div class="form-grid">${fields.join("")}</div></section><div class="actions"><button type="submit">Save ${kind}</button><button id="archive-entity-button" class="danger" type="button">Archive ${kind}</button></div></form>`;
 }
 
 function geoFields(location) {
@@ -385,6 +430,19 @@ function bindEntityForm(kind, entity) {
     } catch (error) { setStatus(`Unable to save ${kind}: ${error.message}`); }
     finally { setBusy(false); }
   });
+  document.querySelector("#archive-entity-button").addEventListener("click", async () => {
+    await archiveSelected(kind, entity.id);
+  });
+}
+
+async function archiveSelected(kind, id) {
+  setBusy(true, `Archiving ${kind}...`);
+  try {
+    await archiveEntity(state.apiBaseUrl, kind, id);
+    await loadGuidebook();
+    setStatus(`${kind[0].toUpperCase()}${kind.slice(1)} archived.`);
+  } catch (error) { setStatus(`Unable to archive ${kind}: ${error.message}`); }
+  finally { setBusy(false); }
 }
 
 function mediaEditor(media) {

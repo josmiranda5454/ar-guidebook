@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   applyCalibrationCapture,
   applyCaptureUrl,
+  archiveEntity,
+  archiveEntityUrl,
   areasUrl,
   calibrationCaptureListUrl,
   createArea,
@@ -93,6 +95,15 @@ test("builds authentication and publish endpoint URLs", () => {
   assert.equal(updateMediaUrl("http://localhost:8080/api/v1", "media-1"), "http://localhost:8080/api/v1/admin/media/media-1");
   assert.equal(updateAreaUrl("http://localhost:8080/api/v1", "area-1"), "http://localhost:8080/api/v1/admin/areas/area-1");
   assert.equal(updateWallUrl("http://localhost:8080/api/v1", "wall-1"), "http://localhost:8080/api/v1/admin/walls/wall-1");
+  assert.equal(archiveEntityUrl("http://localhost:8080/api/v1", "area", "area-1"), "http://localhost:8080/api/v1/admin/areas/area-1/archive");
+});
+
+test("archive requests post to the matching guidebook entity endpoint", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => { calls.push({ url, options }); return new Response(null, { status: 204 }); };
+  await archiveEntity("http://localhost:8080/api/v1", "wall", "wall-1", fetchImpl);
+  assert.equal(calls[0].options.method, "POST");
+  assert.equal(calls[0].url, "http://localhost:8080/api/v1/admin/walls/wall-1/archive");
 });
 
 test("area and wall updates use PUT with JSON", async () => {
