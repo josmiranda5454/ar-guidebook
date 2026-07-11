@@ -483,6 +483,7 @@ private struct RouteARControlPanel: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(isUploading)
+
                     } else {
                         Button {
                             presentRecorderLogin()
@@ -493,6 +494,16 @@ private struct RouteARControlPanel: View {
                         .buttonStyle(.bordered)
                     }
                 }
+            }
+
+            if hasRecorderSession {
+                Button {
+                    signOutRecorder()
+                } label: {
+                    Label("Sign out recorder", systemImage: "rectangle.portrait.and.arrow.right")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
             }
         }
         .font(.caption.weight(.semibold))
@@ -508,11 +519,6 @@ private struct RouteARControlPanel: View {
             }
             if let uploadMessage {
                 Text(uploadMessage)
-            }
-
-            if hasRecorderSession {
-                Button("Sign out recorder", action: signOutRecorder)
-                    .font(.caption2.weight(.semibold))
             }
 
             Text("Confirm the route start, holds, and protection against the wall before climbing.")
