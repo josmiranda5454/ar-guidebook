@@ -24,6 +24,12 @@ import { draftArea, draftOverlay, draftRoute, draftWall } from "./drafts.js";
 import { formatAlignment, formatDateTime, formatReviewStatus } from "./format.js";
 import { parseTracePoints, tracePointsToText, validateNormalizedTrace } from "./trace.js";
 
+const pageUrl = new URL(globalThis.location.href);
+if (pageUrl.searchParams.has("api-base-url")) {
+  pageUrl.searchParams.delete("api-base-url");
+  globalThis.history.replaceState({}, "", `${pageUrl.pathname}${pageUrl.search}${pageUrl.hash}`);
+}
+
 const state = {
   activeView: "guidebook",
   apiBaseUrl: globalThis.CLIMBAR_API_BASE_URL || "http://127.0.0.1:8080/api/v1",
