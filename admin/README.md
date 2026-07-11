@@ -22,6 +22,12 @@ Open `http://127.0.0.1:5173`.
 The UI defaults to `http://127.0.0.1:8080/api/v1`, but you can change the API
 base URL in the page.
 
+Hosted static deployments can set the API URL in `config.js`:
+
+```js
+globalThis.CLIMBAR_API_BASE_URL = "https://api.example.com/api/v1";
+```
+
 ## Current Capabilities
 
 - Browse area, wall, and route hierarchy.

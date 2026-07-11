@@ -26,7 +26,7 @@ import { parseTracePoints, tracePointsToText, validateNormalizedTrace } from "./
 
 const state = {
   activeView: "guidebook",
-  apiBaseUrl: "http://127.0.0.1:8080/api/v1",
+  apiBaseUrl: globalThis.CLIMBAR_API_BASE_URL || "http://127.0.0.1:8080/api/v1",
   areas: [],
   routes: [],
   selectedAreaId: null,
@@ -116,6 +116,7 @@ for (const button of elements.tabButtons) {
   });
 }
 
+elements.apiBaseUrl.value = state.apiBaseUrl;
 loadGuidebook();
 
 async function loadActiveView() {
