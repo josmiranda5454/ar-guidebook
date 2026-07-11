@@ -30,6 +30,17 @@ struct ClimbARAPI {
         return try await get(url: url)
     }
 
+    func nearbyRoutes(latitude: Double, longitude: Double, radiusMeters: Double = 2_000) async throws -> [NearbyRoute] {
+        var components = URLComponents(url: baseURL.appending(path: "nearby/routes"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "radius_meters", value: String(radiusMeters)),
+        ]
+        guard let url = components.url else { throw APIError.invalidURL }
+        return try await get(url: url)
+    }
+
     func offlinePack(areaId: UUID) async throws -> OfflinePack {
         try await get(path: "offline-packs/areas/\(areaId.uuidString)")
     }

@@ -59,6 +59,12 @@ pub struct Route {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NearbyRoute {
+    pub route: Route,
+    pub distance_meters: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GradeSystem {
     YosemiteDecimal,

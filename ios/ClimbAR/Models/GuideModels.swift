@@ -51,6 +51,12 @@ struct Route: Codable, Identifiable, Hashable {
     let arOverlays: [RouteAROverlay]
 }
 
+struct NearbyRoute: Codable, Identifiable, Hashable {
+    let route: Route
+    let distanceMeters: Double
+    var id: UUID { route.id }
+}
+
 enum GradeSystem: String, Codable, Hashable {
     case yosemiteDecimal = "yosemite_decimal"
     case hueco
@@ -90,4 +96,3 @@ struct OfflinePack: Codable, Identifiable, Hashable {
     let areas: [Area]
     let assets: [MediaAsset]
 }
-

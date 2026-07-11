@@ -1,7 +1,7 @@
 use crate::models::{
     ArAnchorStrategy, Area, CalibrationReviewStatus, GeoPoint, GradeSystem, MediaAsset, MediaKind,
-    OfflinePack, OverlayConfidence, Route, RouteArOverlay, RouteCalibrationCapture, RouteTrace,
-    RouteType, TraceCoordinateSpace, TracePoint, Wall, WallPlaneEstimate,
+    NearbyRoute, OfflinePack, OverlayConfidence, Route, RouteArOverlay, RouteCalibrationCapture,
+    RouteTrace, RouteType, TraceCoordinateSpace, TracePoint, Wall, WallPlaneEstimate,
 };
 use crate::repository::{GuideRepository, RepositoryResult};
 use async_trait::async_trait;
@@ -237,6 +237,32 @@ impl GuideRepository for SeedStore {
         Ok(self.search_seed(query))
     }
 
+    async fn nearby_routes(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_meters: f64,
+    ) -> RepositoryResult<Vec<NearbyRoute>> {
+        Ok(self
+            .areas_seed()
+            .into_iter()
+            .flat_map(|area| area.walls)
+            .flat_map(|wall| wall.routes)
+            .filter_map(|route| {
+                let distance = distance_meters(
+                    latitude,
+                    longitude,
+                    route.location.latitude,
+                    route.location.longitude,
+                );
+                (distance <= radius_meters).then_some(NearbyRoute {
+                    route,
+                    distance_meters: distance,
+                })
+            })
+            .collect())
+    }
+
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
         Ok(self.offline_pack_seed(area_id))
     }
@@ -380,6 +406,27 @@ impl GuideRepository for SeedStore {
         Ok(None)
     }
 
+    async fn update_media(
+        &self,
+        media_id: Uuid,
+        mut media: MediaAsset,
+    ) -> RepositoryResult<Option<MediaAsset>> {
+        let mut areas = self.areas.lock().expect("seed area store lock");
+        for existing in areas
+            .iter_mut()
+            .flat_map(|area| area.walls.iter_mut())
+            .flat_map(|wall| wall.routes.iter_mut())
+            .flat_map(|route| route.media.iter_mut())
+        {
+            if existing.id == media_id {
+                media.id = media_id;
+                *existing = media.clone();
+                return Ok(Some(media));
+            }
+        }
+        Ok(None)
+    }
+
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,
@@ -471,6 +518,15 @@ impl GuideRepository for SeedStore {
     }
 }
 
+fn distance_meters(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let lat1 = lat1.to_radians();
+    let lat2 = lat2.to_radians();
+    let dlat = (lat2 - lat1) / 2.0;
+    let dlon = (lon2 - lon1).to_radians() / 2.0;
+    let a = dlat.sin().powi(2) + lat1.cos() * lat2.cos() * dlon.sin().powi(2);
+    6_371_000.0 * 2.0 * a.sqrt().asin()
+}
+
 #[cfg(test)]
 mod tests {
     use super::SeedStore;
@@ -505,6 +561,24 @@ mod tests {
         assert_eq!(pack.version, 1);
         assert_eq!(pack.areas.len(), 1);
         assert_eq!(pack.assets.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn nearby_routes_returns_routes_inside_radius() {
+        let store = SeedStore::new();
+        let results = store.nearby_routes(34.0103, -116.1669, 10.0).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].distance_meters < 1.0);
+    }
+
+    #[tokio::test]
+    async fn publish_offline_pack_increments_version() {
+        let store = SeedStore::new();
+        let area_id = store.areas_seed()[0].id;
+        let first = store.publish_offline_pack(area_id).await.unwrap().unwrap();
+        let latest = store.offline_pack(area_id).await.unwrap().unwrap();
+        assert_eq!(first.version, 2);
+        assert_eq!(latest.version, 2);
     }
 
     #[test]

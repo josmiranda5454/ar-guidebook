@@ -1,8 +1,8 @@
 use crate::{
     models::{
         ArAnchorStrategy, Area, CalibrationReviewStatus, GeoPoint, GradeSystem, MediaAsset,
-        MediaKind, OfflinePack, OverlayConfidence, Route, RouteArAlignment, RouteArOverlay,
-        RouteCalibrationCapture, RouteTrace, RouteType, Wall, WallPlaneEstimate,
+        MediaKind, NearbyRoute, OfflinePack, OverlayConfidence, Route, RouteArAlignment,
+        RouteArOverlay, RouteCalibrationCapture, RouteTrace, RouteType, Wall, WallPlaneEstimate,
     },
     repository::{GuideRepository, RepositoryError, RepositoryResult},
 };
@@ -837,6 +837,36 @@ impl GuideRepository for PgGuideRepository {
         self.search_routes(query).await
     }
 
+    async fn nearby_routes(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_meters: f64,
+    ) -> RepositoryResult<Vec<NearbyRoute>> {
+        let routes = self
+            .load_areas(None)
+            .await?
+            .into_iter()
+            .flat_map(|area| area.walls)
+            .flat_map(|wall| wall.routes)
+            .collect::<Vec<_>>();
+        Ok(routes
+            .into_iter()
+            .filter_map(|route| {
+                let distance = haversine_distance(
+                    latitude,
+                    longitude,
+                    route.location.latitude,
+                    route.location.longitude,
+                );
+                (distance <= radius_meters).then_some(NearbyRoute {
+                    route,
+                    distance_meters: distance,
+                })
+            })
+            .collect())
+    }
+
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>> {
         let row = sqlx::query("SELECT payload FROM offline_pack_versions WHERE area_id = $1 ORDER BY version DESC LIMIT 1")
             .bind(area_id).fetch_optional(&self.pool).await?;
@@ -967,6 +997,28 @@ impl GuideRepository for PgGuideRepository {
             .find(|overlay| overlay.id == overlay_id))
     }
 
+    async fn update_media(
+        &self,
+        media_id: Uuid,
+        mut media: MediaAsset,
+    ) -> RepositoryResult<Option<MediaAsset>> {
+        media.id = media_id;
+        let row = sqlx::query("UPDATE media_assets SET kind = $2, title = $3, url = $4, offline_path = $5 WHERE id = $1 RETURNING id, kind, title, url, offline_path")
+            .bind(media_id).bind(media.kind.to_string()).bind(&media.title).bind(&media.url).bind(&media.offline_path)
+            .fetch_optional(&self.pool).await?;
+        row.map(|row| {
+            let kind: String = row.try_get("kind")?;
+            Ok(MediaAsset {
+                id: row.try_get("id")?,
+                kind: MediaKind::from_str(&kind).map_err(RepositoryError::Decode)?,
+                title: row.try_get("title")?,
+                url: row.try_get("url")?,
+                offline_path: row.try_get("offline_path")?,
+            })
+        })
+        .transpose()
+    }
+
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,
@@ -1000,6 +1052,15 @@ impl GuideRepository for PgGuideRepository {
     ) -> RepositoryResult<Option<RouteArOverlay>> {
         self.apply_calibration_capture(overlay_id, capture_id).await
     }
+}
+
+fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let lat1 = lat1.to_radians();
+    let lat2 = lat2.to_radians();
+    let dlat = (lat2 - lat1) / 2.0;
+    let dlon = (lon2 - lon1).to_radians() / 2.0;
+    let a = dlat.sin().powi(2) + lat1.cos() * lat2.cos() * dlon.sin().powi(2);
+    6_371_000.0 * 2.0 * a.sqrt().asin()
 }
 
 fn geo_point_from_row(row: &sqlx::postgres::PgRow) -> RepositoryResult<GeoPoint> {

@@ -1,6 +1,6 @@
 use crate::models::{
-    Area, CalibrationReviewStatus, OfflinePack, Route, RouteArOverlay, RouteCalibrationCapture,
-    Wall,
+    Area, CalibrationReviewStatus, MediaAsset, NearbyRoute, OfflinePack, Route, RouteArOverlay,
+    RouteCalibrationCapture, Wall,
 };
 use async_trait::async_trait;
 use std::{error::Error, fmt};
@@ -38,6 +38,12 @@ pub trait GuideRepository: Send + Sync {
     async fn wall(&self, wall_id: Uuid) -> RepositoryResult<Option<Wall>>;
     async fn route(&self, route_id: Uuid) -> RepositoryResult<Option<Route>>;
     async fn search(&self, query: &str) -> RepositoryResult<Vec<Route>>;
+    async fn nearby_routes(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_meters: f64,
+    ) -> RepositoryResult<Vec<NearbyRoute>>;
     async fn offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>>;
     async fn publish_offline_pack(&self, area_id: Uuid) -> RepositoryResult<Option<OfflinePack>>;
     async fn create_area(&self, area: Area) -> RepositoryResult<Area>;
@@ -53,6 +59,11 @@ pub trait GuideRepository: Send + Sync {
         overlay_id: Uuid,
         overlay: RouteArOverlay,
     ) -> RepositoryResult<Option<RouteArOverlay>>;
+    async fn update_media(
+        &self,
+        media_id: Uuid,
+        media: MediaAsset,
+    ) -> RepositoryResult<Option<MediaAsset>>;
     async fn create_calibration_capture(
         &self,
         capture: RouteCalibrationCapture,

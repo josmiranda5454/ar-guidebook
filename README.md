@@ -61,6 +61,11 @@ Sign in to the admin UI, edit guidebook data, then use **Publish Offline Pack**.
 The iOS app downloads the latest published version when the user taps **Update
 Offline Area** or pulls to refresh a downloaded area.
 
+Nearby discovery is available from `GET /api/v1/nearby/routes` with latitude,
+longitude, and an optional radius in meters. It returns routes sorted by the
+stored guidebook order with their computed distance; the iOS API client exposes
+the same contract for the location-driven UI milestone.
+
 For a physical iPhone, the backend must listen on your Mac's network interface:
 
 ```sh

@@ -14,8 +14,8 @@ use axum::{
 };
 use db::PgGuideRepository;
 use models::{
-    Area, CalibrationReviewStatus, OfflinePack, Route, RouteArOverlay, RouteCalibrationCapture,
-    Wall,
+    Area, CalibrationReviewStatus, MediaAsset, NearbyRoute, OfflinePack, Route, RouteArOverlay,
+    RouteCalibrationCapture, Wall,
 };
 use repository::{GuideRepository, RepositoryError};
 use seed::SeedStore;
@@ -61,6 +61,7 @@ async fn main() {
         .route("/api/v1/walls/:wall_id", get(get_wall))
         .route("/api/v1/routes/:route_id", get(get_route))
         .route("/api/v1/search", get(search_routes))
+        .route("/api/v1/nearby/routes", get(nearby_routes))
         .route("/api/v1/offline-packs/areas/:area_id", get(get_area_pack))
         .route("/api/v1/admin/auth/login", post(admin_login))
         .route(
@@ -76,6 +77,7 @@ async fn main() {
             "/api/v1/admin/ar-overlays/:overlay_id",
             put(update_ar_overlay),
         )
+        .route("/api/v1/admin/media/:media_id", put(update_media))
         .route(
             "/api/v1/admin/ar-calibration-captures",
             get(list_calibration_captures).post(create_calibration_capture),
@@ -201,6 +203,29 @@ async fn get_route(
 #[derive(Deserialize)]
 struct SearchQuery {
     q: String,
+}
+
+#[derive(Deserialize)]
+struct NearbyQuery {
+    latitude: f64,
+    longitude: f64,
+    radius_meters: Option<f64>,
+}
+
+async fn nearby_routes(
+    State(state): State<AppState>,
+    Query(query): Query<NearbyQuery>,
+) -> Result<Json<Vec<NearbyRoute>>, StatusCode> {
+    state
+        .repository
+        .nearby_routes(
+            query.latitude,
+            query.longitude,
+            query.radius_meters.unwrap_or(2_000.0).clamp(1.0, 50_000.0),
+        )
+        .await
+        .map(Json)
+        .map_err(status_from_repository_error)
 }
 
 async fn search_routes(
@@ -344,6 +369,22 @@ async fn update_ar_overlay(
     state
         .repository
         .update_ar_overlay(overlay_id, overlay)
+        .await
+        .map_err(status_from_repository_error)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn update_media(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(media_id): Path<Uuid>,
+    Json(media): Json<MediaAsset>,
+) -> Result<Json<MediaAsset>, StatusCode> {
+    auth::authorize(&headers, &state)?;
+    state
+        .repository
+        .update_media(media_id, media)
         .await
         .map_err(status_from_repository_error)?
         .map(Json)
