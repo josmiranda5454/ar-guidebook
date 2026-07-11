@@ -96,6 +96,10 @@ Goal: Prepare for TestFlight and field testing.
 - Observability and crash reporting.
 - CI and deployment automation.
 
+Development CI and a container deployment baseline are now included. Sign in
+with Apple, moderation, observability, and hosted media storage remain
+follow-on integrations that require provider credentials and product policy.
+
 Exit criteria:
 
 - TestFlight build is ready for controlled outdoor testing.

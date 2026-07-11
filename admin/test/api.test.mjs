@@ -27,7 +27,7 @@ import {
 } from "../src/api.js";
 import { draftArea, draftOverlay, draftRoute, draftWall, slugify } from "../src/drafts.js";
 import { formatAlignment, formatReviewStatus } from "../src/format.js";
-import { parseTracePoints, tracePointsToText } from "../src/trace.js";
+import { parseTracePoints, tracePointsToText, validateNormalizedTrace } from "../src/trace.js";
 
 test("builds calibration capture list URL with optional filters", () => {
   const url = calibrationCaptureListUrl("http://127.0.0.1:8080/api/v1/", {
@@ -232,6 +232,10 @@ test("trace helpers serialize and parse route trace points", () => {
 test("trace parser rejects incomplete traces", () => {
   assert.throws(() => parseTracePoints("0.1,0.2"), /at least two points/);
   assert.throws(() => parseTracePoints("0.1\n0.2,0.3"), /must be x,y or x,y,z/);
+});
+
+test("normalized trace validation rejects points outside the image", () => {
+  assert.throws(() => validateNormalizedTrace([{ x: 1.2, y: 0.5, z: null }]), /between 0 and 1/);
 });
 
 test("draft helpers create valid guidebook hierarchy payloads", () => {

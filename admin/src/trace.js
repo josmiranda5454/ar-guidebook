@@ -18,6 +18,15 @@ export function parseTracePoints(value) {
   return points;
 }
 
+export function validateNormalizedTrace(points) {
+  for (const point of points) {
+    if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) {
+      throw new Error("Normalized wall-image trace points must be between 0 and 1.");
+    }
+  }
+  return points;
+}
+
 function parseTracePoint(line) {
   const parts = line.split(",").map((part) => part.trim());
 

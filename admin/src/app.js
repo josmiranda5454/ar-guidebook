@@ -16,7 +16,7 @@ import {
 } from "./api.js";
 import { draftArea, draftOverlay, draftRoute, draftWall } from "./drafts.js";
 import { formatAlignment, formatDateTime, formatReviewStatus } from "./format.js";
-import { parseTracePoints, tracePointsToText } from "./trace.js";
+import { parseTracePoints, tracePointsToText, validateNormalizedTrace } from "./trace.js";
 
 const state = {
   activeView: "guidebook",
@@ -535,10 +535,16 @@ function readOverlayForm(overlay) {
       depth_offset_meters: requiredNumber("align-z"),
       scale: requiredNumber("align-scale"),
     },
-    route_trace: {
-      coordinate_space: value("trace-coordinate-space"),
-      points: parseTracePoints(value("trace-points")),
-    },
+    route_trace: readTraceForm(),
+  };
+}
+
+function readTraceForm() {
+  const coordinateSpace = value("trace-coordinate-space");
+  const points = parseTracePoints(value("trace-points"));
+  return {
+    coordinate_space: coordinateSpace,
+    points: coordinateSpace === "normalized_wall_image" ? validateNormalizedTrace(points) : points,
   };
 }
 
