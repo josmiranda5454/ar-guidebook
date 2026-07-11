@@ -23,6 +23,8 @@ const state = {
   apiBaseUrl: "http://127.0.0.1:8080/api/v1",
   areas: [],
   routes: [],
+  selectedAreaId: null,
+  selectedWallId: null,
   selectedRouteId: null,
   captures: [],
   selectedCaptureId: null,
@@ -125,6 +127,12 @@ async function loadGuidebook() {
     if (!state.routes.some(({ route }) => route.id === state.selectedRouteId)) {
       state.selectedRouteId = state.routes[0]?.route.id ?? null;
     }
+    if (!state.areas.some((area) => area.id === state.selectedAreaId)) {
+      state.selectedAreaId = state.areas[0]?.id ?? null;
+    }
+    if (!state.areas.some((area) => area.walls.some((wall) => wall.id === state.selectedWallId))) {
+      state.selectedWallId = state.areas.find((area) => area.id === state.selectedAreaId)?.walls[0]?.id ?? null;
+    }
 
     renderGuidebook();
     setStatus(`Loaded ${state.routes.length} route${state.routes.length === 1 ? "" : "s"}.`);
@@ -199,7 +207,7 @@ function renderRouteList() {
   elements.routeCount.textContent = String(state.routes.length);
   elements.routeList.replaceChildren();
 
-  if (state.routes.length === 0) {
+  if (state.areas.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
     empty.textContent = "No routes found.";
@@ -207,22 +215,50 @@ function renderRouteList() {
     return;
   }
 
-  for (const entry of state.routes) {
-    const row = document.createElement("button");
-    row.className = "capture-row";
-    row.type = "button";
-    row.setAttribute("aria-selected", String(entry.route.id === state.selectedRouteId));
-    row.innerHTML = `
-      <span class="route-name">${escapeHtml(entry.route.name)}</span>
-      <span class="capture-meta">${escapeHtml(entry.area.name)} / ${escapeHtml(entry.wall.name)}</span>
-      <span class="review-status">${escapeHtml(entry.route.grade)} • ${entry.route.ar_overlays.length} overlay${entry.route.ar_overlays.length === 1 ? "" : "s"}</span>
-    `;
-    row.addEventListener("click", () => {
-      state.selectedRouteId = entry.route.id;
+  for (const area of state.areas) {
+    const areaRow = hierarchyRow(area.name, "Area", area.id === state.selectedAreaId);
+    areaRow.addEventListener("click", () => {
+      state.selectedAreaId = area.id;
+      state.selectedWallId = area.walls[0]?.id ?? null;
+      state.selectedRouteId = area.walls[0]?.routes[0]?.id ?? null;
       renderGuidebook();
     });
-    elements.routeList.append(row);
+    elements.routeList.append(areaRow);
+
+    for (const wall of area.walls) {
+      const wallRow = hierarchyRow(wall.name, `Wall · ${area.name}`, wall.id === state.selectedWallId);
+      wallRow.classList.add("hierarchy-child");
+      wallRow.addEventListener("click", () => {
+        state.selectedAreaId = area.id;
+        state.selectedWallId = wall.id;
+        state.selectedRouteId = wall.routes[0]?.id ?? null;
+        renderGuidebook();
+      });
+      elements.routeList.append(wallRow);
+
+      for (const route of wall.routes) {
+        const routeRow = hierarchyRow(route.name, `${area.name} / ${wall.name}`, route.id === state.selectedRouteId);
+        routeRow.classList.add("hierarchy-child", "hierarchy-route");
+        routeRow.innerHTML += `<span class="review-status">${escapeHtml(route.grade)} • ${route.ar_overlays.length} overlay${route.ar_overlays.length === 1 ? "" : "s"}</span>`;
+        routeRow.addEventListener("click", () => {
+          state.selectedAreaId = area.id;
+          state.selectedWallId = wall.id;
+          state.selectedRouteId = route.id;
+          renderGuidebook();
+        });
+        elements.routeList.append(routeRow);
+      }
+    }
   }
+}
+
+function hierarchyRow(name, context, selected) {
+  const row = document.createElement("button");
+  row.className = "capture-row hierarchy-row";
+  row.type = "button";
+  row.setAttribute("aria-selected", String(selected));
+  row.innerHTML = `<span class="route-name">${escapeHtml(name)}</span><span class="capture-meta">${escapeHtml(context)}</span>`;
+  return row;
 }
 
 function renderRouteEditor(entry) {
@@ -365,6 +401,8 @@ async function createAreaFromPrompt() {
     const area = await createArea(state.apiBaseUrl, draftArea(name));
     state.areas = [...state.areas, area];
     state.routes = flattenRoutes(state.areas);
+    state.selectedAreaId = area.id;
+    state.selectedWallId = null;
     state.selectedRouteId = null;
     renderGuidebook();
     setStatus(`Created area "${area.name}".`);
@@ -376,7 +414,7 @@ async function createAreaFromPrompt() {
 }
 
 async function createWallFromPrompt() {
-  const area = selectedRouteEntry()?.area ?? state.areas[0];
+  const area = selectedArea() ?? state.areas[0];
   if (!area) {
     setStatus("Create an area before creating a wall.");
     return;
@@ -396,6 +434,8 @@ async function createWallFromPrompt() {
         : existingArea,
     );
     state.routes = flattenRoutes(state.areas);
+    state.selectedAreaId = area.id;
+    state.selectedWallId = wall.id;
     renderGuidebook();
     setStatus(`Created wall "${wall.name}".`);
   } catch (error) {
@@ -407,7 +447,7 @@ async function createWallFromPrompt() {
 
 async function createRouteFromPrompt() {
   const entry = selectedRouteEntry();
-  const wall = entry?.wall ?? firstWall();
+  const wall = selectedWall() ?? entry?.wall ?? firstWall();
   if (!wall) {
     setStatus("Create a wall before creating a route.");
     return;
@@ -430,6 +470,8 @@ async function createRouteFromPrompt() {
       ),
     }));
     state.routes = flattenRoutes(state.areas);
+    state.selectedAreaId = state.areas.find((area) => area.walls.some((existingWall) => existingWall.id === wall.id))?.id ?? state.selectedAreaId;
+    state.selectedWallId = wall.id;
     state.selectedRouteId = route.id;
     renderGuidebook();
     setStatus(`Created route "${route.name}".`);
@@ -758,6 +800,14 @@ function flattenRoutes(areas) {
 
 function selectedRouteEntry() {
   return state.routes.find((entry) => entry.route.id === state.selectedRouteId) ?? null;
+}
+
+function selectedArea() {
+  return state.areas.find((area) => area.id === state.selectedAreaId) ?? null;
+}
+
+function selectedWall() {
+  return state.areas.flatMap((area) => area.walls).find((wall) => wall.id === state.selectedWallId) ?? null;
 }
 
 function selectedCapture() {

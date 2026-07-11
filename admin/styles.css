@@ -255,6 +255,18 @@ h2 {
   background: #edf5ed;
 }
 
+.hierarchy-row {
+  min-height: 62px;
+}
+
+.hierarchy-child {
+  padding-left: 28px;
+}
+
+.hierarchy-route {
+  padding-left: 44px;
+}
+
 .route-name {
   font-weight: 800;
 }
