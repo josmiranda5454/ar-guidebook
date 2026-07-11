@@ -25,6 +25,7 @@ import { formatAlignment, formatDateTime, formatReviewStatus } from "./format.js
 import { parseTracePoints, tracePointsToText, validateNormalizedTrace } from "./trace.js";
 
 const pageUrl = new URL(globalThis.location.href);
+const apiBaseUrlFromQuery = pageUrl.searchParams.get("api-base-url")?.trim();
 if (pageUrl.searchParams.has("api-base-url")) {
   pageUrl.searchParams.delete("api-base-url");
   globalThis.history.replaceState({}, "", `${pageUrl.pathname}${pageUrl.search}${pageUrl.hash}`);
@@ -32,7 +33,7 @@ if (pageUrl.searchParams.has("api-base-url")) {
 
 const state = {
   activeView: "guidebook",
-  apiBaseUrl: globalThis.CLIMBAR_API_BASE_URL || "http://127.0.0.1:8080/api/v1",
+  apiBaseUrl: apiBaseUrlFromQuery || globalThis.CLIMBAR_API_BASE_URL || "http://127.0.0.1:8080/api/v1",
   areas: [],
   routes: [],
   selectedAreaId: null,
@@ -839,7 +840,7 @@ function renderCaptureList() {
   if (state.captures.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "No calibration captures found.";
+    empty.textContent = "No calibration captures found. Save a snapshot in the iOS AR view, tap Upload, then refresh here. Clear the Route ID and Overlay ID filters when checking all uploads.";
     elements.captureList.append(empty);
     return;
   }

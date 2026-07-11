@@ -287,7 +287,10 @@ struct RouteARView: View {
                 path: "admin/ar-calibration-captures",
                 body: latestCapture
             )
-            uploadMessage = "Uploaded latest calibration snapshot."
+            uploadMessage = "Uploaded latest calibration snapshot. Refresh Calibration Review to see it."
+        } catch let APIError.requestFailed(statusCode) {
+            let status = statusCode.map(String.init) ?? "unknown"
+            uploadMessage = "Upload failed (HTTP \(status)). Check the API URL and recorder sign-in."
         } catch {
             uploadMessage = "Upload failed. Check that the backend is reachable."
         }

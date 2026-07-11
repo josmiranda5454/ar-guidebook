@@ -62,9 +62,11 @@ struct ClimbARAPI {
 
         let (_, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw APIError.requestFailed
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.requestFailed(statusCode: nil)
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw APIError.requestFailed(statusCode: httpResponse.statusCode)
         }
     }
 
@@ -76,9 +78,11 @@ struct ClimbARAPI {
         request.httpBody = try JSONEncoder().encode(["email": email, "password": password])
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw APIError.requestFailed
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.requestFailed(statusCode: nil)
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw APIError.requestFailed(statusCode: httpResponse.statusCode)
         }
 
         let result = try JSONDecoder().decode(RecorderSessionResponse.self, from: data)
@@ -93,9 +97,11 @@ struct ClimbARAPI {
     private func get<T: Decodable>(url: URL) async throws -> T {
         let (data, response) = try await URLSession.shared.data(from: url)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw APIError.requestFailed
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.requestFailed(statusCode: nil)
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw APIError.requestFailed(statusCode: httpResponse.statusCode)
         }
 
         let decoder = JSONDecoder()
@@ -107,7 +113,7 @@ struct ClimbARAPI {
 
 enum APIError: Error {
     case invalidURL
-    case requestFailed
+    case requestFailed(statusCode: Int?)
 }
 
 enum AppConfiguration {
