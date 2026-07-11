@@ -112,7 +112,7 @@ export async function login(apiBaseUrl, email, password, fetchImpl = fetch) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
-  const result = await parseJsonResponse(response);
+  const result = await parseJsonResponse(response, { loginRequest: true });
   setAdminToken(result.token);
   return result;
 }
@@ -274,10 +274,13 @@ export async function applyCalibrationCapture(apiBaseUrl, overlayId, captureId, 
   return parseJsonResponse(response);
 }
 
-async function parseJsonResponse(response) {
+async function parseJsonResponse(response, { loginRequest = false } = {}) {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     if (response.status === 401) {
+      if (loginRequest) {
+        throw new Error("Invalid admin email or password.");
+      }
       setAdminToken("");
       throw new Error("Admin session expired. Sign in again.");
     }

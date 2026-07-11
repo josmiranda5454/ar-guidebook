@@ -19,6 +19,7 @@ import {
   createWall,
   createWallUrl,
   loginUrl,
+  login,
   publishAreaPack,
   publishAreaPackUrl,
   reviewCalibrationCapture,
@@ -104,6 +105,15 @@ test("builds authentication and publish endpoint URLs", () => {
   assert.equal(createMediaUrl("http://localhost:8080/api/v1", "route-1"), "http://localhost:8080/api/v1/admin/routes/route-1/media");
   assert.equal(archivedUrl("http://localhost:8080/api/v1"), "http://localhost:8080/api/v1/admin/archived");
   assert.equal(restoreArchivedUrl("http://localhost:8080/api/v1", "route-1"), "http://localhost:8080/api/v1/admin/archived/route-1/restore");
+});
+
+test("login reports invalid credentials instead of an expired session", async () => {
+  const fetchImpl = async () => new Response(null, { status: 401 });
+
+  await assert.rejects(
+    login("http://localhost:8080/api/v1", "wrong@example.com", "wrong", fetchImpl),
+    { message: "Invalid admin email or password." },
+  );
 });
 
 test("restores an archived entity with an authenticated POST", async () => {
