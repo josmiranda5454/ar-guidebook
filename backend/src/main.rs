@@ -472,12 +472,54 @@ async fn restore_entity(
     Path(entity_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     auth::authorize(&headers, &state)?;
+    let entity_type = state
+        .repository
+        .archived_entities()
+        .await
+        .map_err(status_from_repository_error)?
+        .into_iter()
+        .find(|entry| entry.id == entity_id)
+        .map(|entry| entry.entity_type);
     if state
         .repository
         .restore_entity(entity_id)
         .await
         .map_err(status_from_repository_error)?
     {
+        let area_id = match entity_type.as_deref() {
+            Some("area") => Some(entity_id),
+            Some("wall") => state
+                .repository
+                .wall(entity_id)
+                .await
+                .map_err(status_from_repository_error)?
+                .map(|wall| wall.area_id),
+            Some("route") => {
+                if let Some(route) = state
+                    .repository
+                    .route(entity_id)
+                    .await
+                    .map_err(status_from_repository_error)?
+                {
+                    state
+                        .repository
+                        .wall(route.wall_id)
+                        .await
+                        .map_err(status_from_repository_error)?
+                        .map(|wall| wall.area_id)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        if let Some(area_id) = area_id {
+            state
+                .repository
+                .publish_offline_pack(area_id)
+                .await
+                .map_err(status_from_repository_error)?;
+        }
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)
