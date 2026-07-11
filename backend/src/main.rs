@@ -170,6 +170,7 @@ fn health_payload() -> serde_json::Value {
     serde_json::json!({
         "status": "ok",
         "service": "climbar-backend",
+        "api_version": "v1",
         "version": env!("CARGO_PKG_VERSION"),
     })
 }
@@ -725,6 +726,7 @@ mod tests {
 
         assert_eq!(payload["status"], "ok");
         assert_eq!(payload["service"], "climbar-backend");
+        assert_eq!(payload["api_version"], "v1");
         assert_eq!(payload["version"], env!("CARGO_PKG_VERSION"));
     }
 
