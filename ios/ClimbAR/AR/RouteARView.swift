@@ -17,6 +17,9 @@ struct RouteARView: View {
     @State private var isControlPanelExpanded = false
     @State private var isRecorderLoginPresented = false
     @State private var hasRecorderSession: Bool
+    @State private var routeStartWorldPosition: SIMD3<Float>?
+    @State private var isPlacingRouteStart = false
+    @State private var anchorMessage: String?
 
     init(route: Route, overlay: RouteAROverlay) {
         self.route = route
@@ -36,11 +39,19 @@ struct RouteARView: View {
             initialValue: latestCapture.flatMap(RouteCalibrationCaptureStore.jsonString(for:))
         )
         _hasRecorderSession = State(initialValue: AppConfiguration.recorderSessionToken != nil)
+        _routeStartWorldPosition = State(initialValue: nil)
     }
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            RouteARSceneView(routeName: route.name, overlay: overlay, alignment: alignment)
+            RouteARSceneView(
+                routeName: route.name,
+                overlay: overlay,
+                alignment: alignment,
+                routeStartWorldPosition: routeStartWorldPosition,
+                isPlacingRouteStart: isPlacingRouteStart,
+                onRouteStartPlaced: placeRouteStart
+            )
                 .ignoresSafeArea()
 
             RouteARControlPanel(
@@ -48,6 +59,7 @@ struct RouteARView: View {
                 overlay: overlay,
                 alignmentHint: alignmentHint,
                 alignmentStatus: alignmentStatus,
+                anchorStatus: anchorStatus,
                 alignment: $alignment,
                 isExpanded: $isControlPanelExpanded,
                 captureStatus: captureStatus,
@@ -56,9 +68,11 @@ struct RouteARView: View {
                 hasLatestCapture: latestCapture != nil,
                 hasRecorderSession: hasRecorderSession,
                 isUploading: isUploading,
+                isPlacingRouteStart: isPlacingRouteStart,
                 saveCalibrationCapture: saveCalibrationCapture,
                 uploadLatestCapture: uploadLatestCapture,
-                presentRecorderLogin: { isRecorderLoginPresented = true }
+                presentRecorderLogin: { isRecorderLoginPresented = true },
+                beginRouteStartPlacement: beginRouteStartPlacement
             )
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
@@ -105,6 +119,27 @@ struct RouteARView: View {
         captureCount == 0 ? "Align the yellow trace with the route." : "Latest alignment saved on this device."
     }
 
+    private var anchorStatus: String {
+        if let anchorMessage {
+            return anchorMessage
+        }
+
+        return routeStartWorldPosition == nil
+            ? "Tap Set Route Start, then tap the route start on the wall."
+            : "Trace anchored to the wall for this session."
+    }
+
+    private func beginRouteStartPlacement() {
+        anchorMessage = nil
+        isPlacingRouteStart = true
+    }
+
+    private func placeRouteStart(at worldPosition: SIMD3<Float>) {
+        routeStartWorldPosition = worldPosition
+        isPlacingRouteStart = false
+        anchorMessage = "Route start anchored to the wall."
+    }
+
     private func saveCalibrationCapture() {
         let capture = RouteCalibrationCapture(
             routeId: route.id,
@@ -146,6 +181,7 @@ private struct RouteARControlPanel: View {
     let overlay: RouteAROverlay
     let alignmentHint: String
     let alignmentStatus: String
+    let anchorStatus: String
     @Binding var alignment: RouteARAlignment
     @Binding var isExpanded: Bool
     let captureStatus: String
@@ -154,9 +190,11 @@ private struct RouteARControlPanel: View {
     let hasLatestCapture: Bool
     let hasRecorderSession: Bool
     let isUploading: Bool
+    let isPlacingRouteStart: Bool
     let saveCalibrationCapture: () -> Void
     let uploadLatestCapture: () async -> Void
     let presentRecorderLogin: () -> Void
+    let beginRouteStartPlacement: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -193,6 +231,8 @@ private struct RouteARControlPanel: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(ClimbARStyle.tint)
 
+                        placementAction
+
                         Text(alignmentHint)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -216,6 +256,11 @@ private struct RouteARControlPanel: View {
                     Label(alignmentStatus, systemImage: "scope")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(ClimbARStyle.tint)
+
+                    Text(anchorStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
 
                     HStack {
                         Text(alignment.summary)
@@ -324,6 +369,27 @@ private struct RouteARControlPanel: View {
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
+    }
+
+    private var placementAction: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                beginRouteStartPlacement()
+            } label: {
+                Label(
+                    isPlacingRouteStart ? "Tap the route start on the wall" : "Set Route Start",
+                    systemImage: isPlacingRouteStart ? "hand.tap" : "scope"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isPlacingRouteStart)
+
+            Text(anchorStatus)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
     }
 }
 
@@ -485,6 +551,13 @@ private struct RouteARSceneView: UIViewRepresentable {
     let routeName: String
     let overlay: RouteAROverlay
     let alignment: RouteARAlignment
+    let routeStartWorldPosition: SIMD3<Float>?
+    let isPlacingRouteStart: Bool
+    let onRouteStartPlaced: (SIMD3<Float>) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onRouteStartPlaced: onRouteStartPlaced)
+    }
 
     func makeUIView(context: Context) -> ARView {
         let arView = ARView(frame: .zero)
@@ -498,17 +571,26 @@ private struct RouteARSceneView: UIViewRepresentable {
             arView.session.run(configuration)
         }
 
+        let tapGesture = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap(_:))
+        )
+        arView.addGestureRecognizer(tapGesture)
+
         renderTrace(in: arView)
         return arView
     }
 
     func updateUIView(_ arView: ARView, context: Context) {
+        context.coordinator.isPlacingRouteStart = isPlacingRouteStart
+        context.coordinator.onRouteStartPlaced = onRouteStartPlaced
         arView.scene.anchors.removeAll()
         renderTrace(in: arView)
     }
 
     private func renderTrace(in arView: ARView) {
-        let points = RouteTraceProjector().project(overlay: overlay, alignment: alignment)
+        let projectedPoints = RouteTraceProjector().project(overlay: overlay, alignment: alignment)
+        let points = anchoredPoints(projectedPoints)
         guard points.count >= 2 else {
             return
         }
@@ -539,6 +621,15 @@ private struct RouteARSceneView: UIViewRepresentable {
         arView.scene.addAnchor(anchor)
     }
 
+    private func anchoredPoints(_ points: [SIMD3<Float>]) -> [SIMD3<Float>] {
+        guard let routeStartWorldPosition, let firstPoint = points.first else {
+            return points
+        }
+
+        let translation = routeStartWorldPosition - firstPoint
+        return points.map { $0 + translation }
+    }
+
     private func addRouteNameLabel(_ name: String, near point: SIMD3<Float>, to anchor: AnchorEntity) {
         let labelPosition = point + SIMD3<Float>(0, 0.18, 0)
         let connector = RouteTraceSegmentEntity.make(
@@ -565,6 +656,39 @@ private struct RouteARSceneView: UIViewRepresentable {
             label.components.set(BillboardComponent())
         }
         anchor.addChild(label)
+    }
+
+    final class Coordinator: NSObject {
+        var isPlacingRouteStart = false
+        var onRouteStartPlaced: (SIMD3<Float>) -> Void
+
+        init(onRouteStartPlaced: @escaping (SIMD3<Float>) -> Void) {
+            self.onRouteStartPlaced = onRouteStartPlaced
+        }
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard isPlacingRouteStart,
+                  let arView = gesture.view as? ARView else {
+                return
+            }
+
+            let location = gesture.location(in: arView)
+            guard let result = arView.raycast(
+                from: location,
+                allowing: .estimatedPlane,
+                alignment: .vertical
+            ).first else {
+                return
+            }
+
+            let transform = result.worldTransform
+            let worldPosition = SIMD3<Float>(
+                transform.columns.3.x,
+                transform.columns.3.y,
+                transform.columns.3.z
+            )
+            onRouteStartPlaced(worldPosition)
+        }
     }
 }
 
